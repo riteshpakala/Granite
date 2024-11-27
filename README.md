@@ -15,7 +15,7 @@ The Granite architecture provides:
   
 ### Thanks
 
-Also a huge shoutout to [@din](https://github.com/din). They have helped me through so much, when it came to learning iOS development, Metal, you name it. CS courses in University do not come close to their mentorship. The Signal idea comes from their interpration of architecture: [Compose](https://github.com/din/compose)
+Also a huge shoutout to [@din](https://github.com/din). They have helped me through so much, when it came to learning iOS development, Metal, you name it. CS courses in University do not come close to their mentorship. The Signal idea comes from their interpretation of architecture: [Compose](https://github.com/din/compose)
 
 # High Level Overview
 
