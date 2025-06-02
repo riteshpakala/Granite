@@ -20,15 +20,18 @@ public struct GraniteRouteWindowProperties {
     public let isCompact: Bool
     public let isChildWindow: Bool
     public let titlebarAware: Bool = false
+    public let fullContentSize: Bool
     
     public init(title: String = "",
                 style: GraniteNavigationWindowStyle = .default,
                 isCompact: Bool = false,
-                isChildWindow: Bool = false) {
+                isChildWindow: Bool = false,
+                fullContentSize: Bool = true) {
         self.title = title
         self.style = style
         self.isCompact = isCompact
         self.isChildWindow = isChildWindow
+        self.fullContentSize = fullContentSize
     }
     
     public static func child(size: CGSize) -> GraniteRouteWindowProperties {
@@ -61,11 +64,19 @@ public struct GraniteNavigationWindowStyle {
     var size: CGSize
     var minSize: CGSize
     var mask: NSWindow.StyleMask?
+    var hideMinimize: Bool
+    var hideExpand: Bool
     
-    public init(size: CGSize, minSize: CGSize? = nil, mask: NSWindow.StyleMask? = nil) {
+    public init(size: CGSize,
+                minSize: CGSize? = nil,
+                mask: NSWindow.StyleMask? = nil,
+                hideMinimize: Bool = true,
+                hideExpand: Bool = true) {
         self.size = size
         self.minSize = minSize ?? size
         self.mask = mask
+        self.hideMinimize = hideMinimize
+        self.hideExpand = hideExpand
     }
     
     public static var `default`: GraniteNavigationWindowStyle {
@@ -75,7 +86,7 @@ public struct GraniteNavigationWindowStyle {
     public static var defaultSize: CGSize = .init(width: 360, height: 480)
 }
 
-#if os(iOS)
+#if os(iOS) || os(visionOS)
 public struct NSWindow {
     public enum StyleMask {
         case resizable
@@ -105,8 +116,21 @@ public class GraniteNavigationWindow {
         guard let window = NSApplication.shared.windows.first(where: { $0.isKeyWindow }) else {
             return
         }
-        
-        //TODO: Set main window
+        GraniteLog("Setting Main Window")
+        window
+            .graniteStyle(
+                .init(
+                    style: .init(
+                        size: GraniteNavigationWindowStyle.defaultSize,
+                        hideMinimize: false,
+                        hideExpand: false
+                    ),
+                    fullContentSize: false
+                )
+            )
+//        //TODO: Set main window
+//        let id = UUID()
+//        GraniteNavigationWindow.shared.mainWindowId = id.uuidString
     }
     
     public func addWindow<Content: View>(id: String? = nil,
@@ -319,8 +343,10 @@ public extension NSWindow {
         
         if props.isChildWindow {
             windowStyleMask = []
-        } else {
+        } else if props.fullContentSize {
             windowStyleMask = [.fullSizeContentView, .titled]
+        } else {
+            windowStyleMask = [.titled]
         }
         
         if props.isClosable {
@@ -341,8 +367,8 @@ public extension NSWindow {
         backgroundColor = .clear
         
         standardWindowButton(.closeButton)?.isHidden = props.isClosable == false// compact == true
-        standardWindowButton(.miniaturizeButton)?.isHidden = true
-        standardWindowButton(.zoomButton)?.isHidden = true
+        standardWindowButton(.miniaturizeButton)?.isHidden = props.style.hideMinimize
+        standardWindowButton(.zoomButton)?.isHidden = props.style.hideExpand
         
         titlebarAppearsTransparent = true
         

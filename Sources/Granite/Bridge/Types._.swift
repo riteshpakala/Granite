@@ -7,7 +7,7 @@
 //
 
 import SwiftUI
-#if os(iOS)
+#if os(iOS) || os(visionOS) || os(visionOS)
 import UIKit
 public typealias GraniteImage = UIImage
 public typealias GraniteBaseViewController = UIViewController

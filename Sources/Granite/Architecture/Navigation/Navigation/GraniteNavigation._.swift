@@ -184,7 +184,7 @@ public final class GraniteNavigation: ObservableObject {
         isActive[addr] = false
         stack.removeLast()
         
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         self.objectWillChange.send()
         #endif
         
@@ -234,7 +234,7 @@ extension View {
     }
     
     private func initUINavigation(_ backgroundColor: Color) {
-#if os(iOS)
+#if os(iOS) || os(visionOS)
         //        UINavigationBar.appearance().isUserInteractionEnabled = false
         UINavigationBar.appearance().backgroundColor = UIColor(backgroundColor)
         //        UINavigationBar.appearance().barTintColor = .clear

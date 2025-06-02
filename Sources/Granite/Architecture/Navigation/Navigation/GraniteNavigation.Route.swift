@@ -7,7 +7,7 @@
 
 import Foundation
 import SwiftUI
-#if os(iOS)
+#if os(iOS) || os(visionOS)
 import UIKit
 #endif
 
@@ -62,9 +62,9 @@ extension View {
         
         return Button {
             //TODO: reusable.
-#if os(iOS)
+            #if os(iOS)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-#endif
+            #endif
             router.navigation.push(memadd, window: window)
         } label: {
             self
@@ -82,9 +82,9 @@ extension View {
         }
         
         return Button {
-#if os(iOS)
+            #if os(iOS)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-#endif
+            #endif
             router.navigation.push(memadd, window: window)
         } label: {
             self
@@ -103,9 +103,9 @@ extension View {
         
         return self
             .onTapGesture {
-#if os(iOS)
+                #if os(iOS)
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-#endif
+                #endif
                 router.navigation.push(memadd, window: window)
             }
     }
@@ -122,9 +122,9 @@ extension View {
         
         return self
             .onTapGesture {
-#if os(iOS)
+                #if os(iOS)
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-#endif
+                #endif
                 router.navigation.push(memadd, window: window)
             }
     }

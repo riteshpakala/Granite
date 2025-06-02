@@ -7,7 +7,7 @@
 //
 
 //import SwiftUI
-//#if os(iOS)
+//#if os(iOS) || os(visionOS)
 //import UIKit
 //#elseif os(OSX)
 //import AppKit
@@ -16,7 +16,7 @@
 //extension GBridge {
 //    public struct Views {
 //        public static func GImage(_ gImage: GImage) -> Image {
-//            #if os(iOS)
+//            #if os(iOS) || os(visionOS)
 //                return Image(uiImage: gImage)
 //            #elseif os(OSX)
 //                return Image(nsImage: gImage)

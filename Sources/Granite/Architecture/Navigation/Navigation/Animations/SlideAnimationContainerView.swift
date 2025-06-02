@@ -43,11 +43,11 @@ struct SlideAnimationContainerView<MenuContent: View>: View {
          @ViewBuilder _ menuContent: @escaping () -> MenuContent) {
         _isShowing = isShowing
         _loaded = loaded
-#if os(iOS)
+        #if os(iOS)
         let viewingWidth: CGFloat = UIScreen.main.bounds.width * viewingThreshold
-#else
+        #else
         let viewingWidth: CGFloat = 350
-#endif
+        #endif
         self._offsetX = .init(initialValue: viewingWidth)
         self.width = viewingWidth
         self.startWidth = viewingWidth * startThreshold
