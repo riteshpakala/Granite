@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-public struct WindowComponent<Content: View>: GraniteScene {
+public struct WindowComponent<Content: GraniteComponent>: GraniteScene {
     public struct Center: GraniteCenter {
         public struct State: GraniteState {
             public init() {}
@@ -41,15 +41,13 @@ public struct WindowComponent<Content: View>: GraniteScene {
     
     public var body: some Scene {
         WindowGroup {
-            #if os(macOS)
             content()
-                .task {
+                .onAppear {
                     //TODO: Set main window
+                    #if os(macOS)
                     GraniteNavigationWindow.setMainWindow()
+                    #endif
                 }
-            #else
-            EmptyView()
-            #endif
         }
     }
 }
