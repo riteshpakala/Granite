@@ -8,6 +8,7 @@
 
 import Foundation
 import SwiftUI
+import Combine
 
 public protocol AnyRelay {
     var id: UUID { get }
@@ -78,4 +79,42 @@ public enum GraniteRelayBehavior {
     case normal
     case silence
     case detach
+}
+
+// Add this extension to your Relay property wrapper
+extension Relay {
+    
+    @discardableResult
+    public func observe<Value: Equatable>(
+        _ keyPath: KeyPath<Service.GenericGraniteCenter.GenericGraniteState, Value>,
+        handler: @escaping (Value) -> Void
+    ) -> AnyCancellable {
+        
+        var lastValue = wrappedValue.state[keyPath: keyPath]
+        
+        return relay.objectWillChange
+            .compactMap { [weak relay = self.relay] _ -> Value? in
+                relay?.service.state[keyPath: keyPath]
+            }
+            .removeDuplicates()
+            .sink { newValue in
+                guard newValue != lastValue else { return }
+                lastValue = newValue
+                handler(newValue)
+            }
+    }
+    
+    // Overload for non-Equatable types
+    @discardableResult
+    public func observe<Value>(
+        _ keyPath: KeyPath<Service.GenericGraniteCenter.GenericGraniteState, Value>,
+        handler: @escaping (Value) -> Void
+    ) -> AnyCancellable {
+        
+        return relay.objectWillChange
+            .compactMap { [weak relay = self.relay] _ -> Value? in
+                relay?.service.state[keyPath: keyPath]
+            }
+            .sink(receiveValue: handler)
+    }
 }
