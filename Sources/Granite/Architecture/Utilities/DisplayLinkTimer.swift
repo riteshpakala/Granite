@@ -22,7 +22,7 @@ extension Int {
     }
 }
 
-#if os(iOS)
+#if os(iOS) || os(visionOS)
 import UIKit
 public typealias GraniteDisplayLink = CADisplayLink
 
