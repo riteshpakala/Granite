@@ -63,6 +63,7 @@ public struct Store<State : GraniteState> : DynamicProperty, AnyGraniteStore {
         container.restore(wait: shouldPreload || forCompletion)
     }
     
+    // Essentially forces a restore, maybe the naming should change?
     func preload() {
         container.preload()
     }

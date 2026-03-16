@@ -33,4 +33,10 @@ public struct Service<Center: GraniteCenter> : DynamicProperty {
     public init(_ kind: GraniteRelayKind = .offline) {
         command = .init(.service(kind))
     }
+    
+    public init(_ kind: GraniteRelayKind = .offline, state: Center.GenericGraniteState) {
+        var initialCenter: Center = .init()
+        initialCenter.state = state
+        command = .init(.service(kind), initialCenter: initialCenter)
+    }
 }

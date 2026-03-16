@@ -103,7 +103,7 @@ final public class FilePersistence : AnyPersistence {
     public func restore<State>() -> State? where State : Codable {
         let decoder = PropertyListDecoder()
         
-        print("{TEST} \(url)")
+        // GraniteLog("Restored url: \(url)")
         
         guard let data = try? Data(contentsOf: url) else {
             GraniteLog(key, level: .error)
