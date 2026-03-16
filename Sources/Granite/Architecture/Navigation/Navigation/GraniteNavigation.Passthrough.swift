@@ -131,7 +131,7 @@ public struct NavigationPassthroughComponent<Component: GraniteComponent, Payloa
     
     public var body: some View {
         Group {
-            #if os(iOS)
+            #if os(iOS) || os(visionOS)
             SlideAnimationContainerView($isShowing,
                       loaded: $loaded) {
                 mainView
@@ -208,7 +208,7 @@ public struct NavigationPassthroughComponent<Component: GraniteComponent, Payloa
                     Spacer()
                     HStack {
                         Spacer()
-                        #if os(iOS)
+                        #if os(iOS) || os(visionOS)
                         ProgressView()
                         #else
                         ProgressView()

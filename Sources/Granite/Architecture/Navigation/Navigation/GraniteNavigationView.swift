@@ -29,7 +29,7 @@ struct GraniteNavigationView<Content: View>: View {
     }
     
     var body: some View {
-//        #if os(iOS)
+//        #if os(iOS) || os(visionOS)
 //        NavigationView {
 //            mainView
 //        }
@@ -65,7 +65,7 @@ struct GraniteNavigationView<Content: View>: View {
 
 fileprivate extension View {
     func navBarTitle() -> some View {
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         self.navigationBarTitle("", displayMode: .inline)
         #else
         self
@@ -73,7 +73,7 @@ fileprivate extension View {
     }
     
     func navBarHidden() -> some View {
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         self.navigationBarHidden(true)
         #else
         self
@@ -81,7 +81,7 @@ fileprivate extension View {
     }
     
     func navStack() -> some View {
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         self.navigationViewStyle(.stack)
         #else
         self

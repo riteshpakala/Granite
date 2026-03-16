@@ -59,7 +59,7 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
         container.pausable?.state = .normal
     }
     
-	init(_ id: ID) where ObjectType: SharableObject {
+	public init(_ id: ID) where ObjectType: SharableObject {
         if let object = SharedRepository.getObject(for: id.hashValue) as? ObjectType {
             container = .init(wrappedValue: object, id: id)
         } else {

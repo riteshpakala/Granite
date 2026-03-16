@@ -30,7 +30,7 @@ public extension EnvironmentValues {
     }
 }
 
-#if os(iOS)
+#if os(iOS) || os(visionOS)
 extension UINavigationController: UIGestureRecognizerDelegate {
     override open func viewDidLoad() {
         super.viewDidLoad()
@@ -59,7 +59,7 @@ public extension EnvironmentValues {
 }
 
 public struct GraniteNavigationShowingKey: EnvironmentKey {
-    #if os(iOS)
+    #if os(iOS) || os(visionOS)
     public static var defaultValue: Bool = false
     #else
     //TODO: maybe needs more thought or more properties exposed to give navigation context

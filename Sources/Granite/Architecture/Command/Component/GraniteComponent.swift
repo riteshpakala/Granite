@@ -11,12 +11,10 @@ import SwiftUI
 import Combine
 
 extension Storage {
-
     struct ComponentIdentifierKey : Hashable {
         let id : String
         let keyPath: AnyKeyPath
     }
-    
 }
 
 /*

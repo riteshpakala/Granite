@@ -22,10 +22,13 @@ public struct WindowComponent<Content: View>: GraniteScene {
     @Command public var center: Center
     
     var content: (() -> Content)
+    var windowId: String
     var backgroundColor: Color
-    public init(backgroundColor: Color,
+    public init(id: String = UUID().uuidString,
+                backgroundColor: Color,
                 @ViewBuilder content: @escaping (() -> Content)) {
         self.content = content
+        self.windowId = id
         self.backgroundColor = backgroundColor
     }
     
@@ -40,16 +43,14 @@ public struct WindowComponent<Content: View>: GraniteScene {
 //    }
     
     public var body: some Scene {
-        WindowGroup {
-            #if os(macOS)
+        WindowGroup(id: windowId) {
             content()
-                .task {
+                .onAppear {
                     //TODO: Set main window
+                    #if os(macOS)
                     GraniteNavigationWindow.setMainWindow()
+                    #endif
                 }
-            #else
-            EmptyView()
-            #endif
         }
     }
 }

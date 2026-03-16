@@ -59,7 +59,7 @@ public class GraniteStore<State : GraniteState>: ObservableObject, Nameable {
         
         $state
             .removeDuplicates()
-            .debounce(for: .seconds(0.2), scheduler: RunLoop.main)
+            .debounce(for: .seconds(0.02), scheduler: RunLoop.main)
             .sink { [weak self] state in
             if self?.autoSave == true && self?.isSyncing == false {
                 self?.persistence.save(state)

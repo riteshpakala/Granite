@@ -6,7 +6,7 @@
 //  Copyright © 2020 Stoic Collective, LLC. All rights reserved.
 //
 
-#if os(iOS)
+#if os(iOS) || os(visionOS)
 
 import Foundation
 import UIKit

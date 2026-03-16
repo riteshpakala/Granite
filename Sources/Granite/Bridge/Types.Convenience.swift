@@ -8,7 +8,7 @@
 
 import Foundation
 
-#if os(iOS)
+#if os(iOS) || os(visionOS) || os(visionOS)
 import UIKit
 
 extension GraniteImage {
@@ -19,7 +19,7 @@ extension GraniteImage {
     
 }
 
-#else
+#elseif os(visionOS)
 import AppKit
 
 extension GraniteImage {

@@ -32,10 +32,10 @@ public extension GraniteMemory {
 
             if kern == KERN_SUCCESS {
                 let usedSize = Int(vmInfo.internal + vmInfo.compressed)
-                print("Memory in use: \(usedSize) bytes")
+                GraniteLog("Memory in use: \(usedSize) bytes")
             } else {
                 let errorString = String(cString: mach_error_string(kern), encoding: .ascii) ?? "unknown error"
-                print("Error with task_info(): \(errorString)");
+                GraniteLog("Error with task_info(): \(errorString)");
             }
         }
         

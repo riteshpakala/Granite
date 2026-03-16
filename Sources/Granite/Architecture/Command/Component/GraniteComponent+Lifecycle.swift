@@ -52,7 +52,6 @@ extension GraniteComponent {
         }
         
         if #available(macOS 12.4, iOS 15, *) {
-            
             return view
                 .task {
                     for relay in relays {
@@ -78,7 +77,6 @@ extension GraniteComponent {
                     locate.command.removeListeners(self.id)
                 }
         } else {
-            
             return view
                 .onAppear {
                     for relay in relays {

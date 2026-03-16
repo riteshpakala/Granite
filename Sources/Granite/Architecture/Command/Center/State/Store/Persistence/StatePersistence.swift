@@ -53,12 +53,12 @@ public struct StatePersistence<State : Codable> {
     
     public func forceRestore() {
         storage.readWriteQueue?.waitUntilAllOperationsAreFinished()
-//        if let state : State = storage.restore() {
-//            setState(state)
-//            isLoaded(true)
-//        } else {
-//            save()
-//        }
+        if let state : State = storage.restore() {
+            setState(state)
+            isLoaded(true)
+        } else {
+            save()
+        }
     }
     
     public func purge() {

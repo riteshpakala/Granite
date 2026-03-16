@@ -11,3 +11,9 @@ public protocol GraniteScene: Scene {
     associatedtype GenericGraniteCenter: GraniteCenter
     var center: GenericGraniteCenter { get set }
 }
+
+public extension GraniteScene {
+    static var id: String {
+        String(describing: self)
+    }
+}
