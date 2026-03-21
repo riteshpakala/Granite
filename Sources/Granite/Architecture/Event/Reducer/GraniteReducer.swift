@@ -93,14 +93,28 @@ extension AnyGraniteReducer {
 
 public enum GraniteReducerBehavior {
     case task(TaskPriority)
+    /// Like `task` but skips the final `updateState` after the reducer returns.
+    /// Use this for streaming reducers that push state mid-flight via internal `send` calls.
+    /// The initial state snapshot is passed in for reading, but the coordinator's state
+    /// is never overwritten by the snapshot once the reducer finishes.
+    case streamingTask(TaskPriority)
     case none
-    
+
     var isTask: Bool {
         switch self {
-        case .task:
+        case .task, .streamingTask:
             return true
         default:
             return false
+        }
+    }
+
+    var priority: TaskPriority? {
+        switch self {
+        case .task(let p), .streamingTask(let p):
+            return p
+        default:
+            return nil
         }
     }
 }
@@ -121,6 +135,10 @@ public protocol GraniteReducer: AnyGraniteReducer {
     func reduce(state: inout Center.GenericGraniteState) async
     func reduce(state: inout Center.GenericGraniteState, payload: Metadata)
     func reduce(state: inout Center.GenericGraniteState, payload: Metadata) async
+    /// Called by `streamingTask` reducers. `stream` pushes mid-flight state to the
+    /// coordinator on the main thread so every mutation is immediately visible to SwiftUI.
+    func reduce(state: inout Center.GenericGraniteState,
+                stream: @escaping (Center.GenericGraniteState) -> Void) async
     
     var thread: DispatchQueue? { get }
     var behavior: GraniteReducerBehavior { get }
@@ -150,6 +168,8 @@ extension GraniteReducer {
     public func reduce(state: inout Center.GenericGraniteState) async {}
     public func reduce(state: inout Center.GenericGraniteState, payload: Metadata) {}
     public func reduce(state: inout Center.GenericGraniteState, payload: Metadata) async {}
+    public func reduce(state: inout Center.GenericGraniteState,
+                       stream: @escaping (Center.GenericGraniteState) -> Void) async {}
 }
 
 public protocol EventExecutable {
@@ -180,6 +200,8 @@ public protocol EventExecutable {
     func update(_ payload: GranitePayload?)
     func execute(_ state: AnyGraniteState?) -> AnyGraniteState
     func executeAsync(_ state: AnyGraniteState?) async -> AnyGraniteState
+    func executeStreaming(_ state: AnyGraniteState?,
+                         stream: @escaping (AnyGraniteState) -> Void) async
     init()
     init(debounce interval: Double)
     init(throttle interval: Double)
@@ -304,6 +326,15 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
         return mutableState
     }
     
+    public func executeStreaming(_ state: AnyGraniteState?,
+                                 stream: @escaping (AnyGraniteState) -> Void) async {
+        var mutableState = (state as? Expedition.Center.GenericGraniteState) ?? Expedition.Center.GenericGraniteState()
+
+        find()
+
+        await expedition.reduce(state: &mutableState, stream: { stream($0) })
+    }
+
     public func setOnline(_ isOnline: Bool) {
         self.isOnline = isOnline
     }

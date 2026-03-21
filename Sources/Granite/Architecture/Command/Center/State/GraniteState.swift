@@ -10,8 +10,8 @@ import Foundation
 import SwiftUI
 import Combine
 
-public protocol AnyGraniteState {
-    
+public protocol AnyGraniteState: Sendable {
+
 }
 
 public protocol GraniteState: AnyGraniteState, Findable, GraniteModel {

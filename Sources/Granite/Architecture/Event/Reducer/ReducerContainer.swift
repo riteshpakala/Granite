@@ -160,11 +160,15 @@ class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectab
             }
         } else {
             self.executionTask?.cancel()
-            
+
             switch reducer?.behavior {
             case .task(let priority):
                 self.executionTask = Task(priority: priority) { [weak self] in
                     await self?.executeAsync()
+                }
+            case .streamingTask(let priority):
+                self.executionTask = Task(priority: priority) { [weak self] in
+                    await self?.executeStreamingAsync()
                 }
             default:
                 self.execute()
@@ -213,6 +217,26 @@ class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectab
         }
     }
     
+    /// Runs a streaming async reducer. Instead of snapshotting state at entry and overwriting
+    /// it at exit, the reducer receives a `stream` closure it calls after each mutation.
+    /// Every `stream(state)` call is dispatched to the main thread so SwiftUI sees each
+    /// incremental update immediately — no batching, no snapshot overwrite.
+    func executeStreamingAsync() async {
+        for signal in (sideEffects[.before] ?? []) {
+            signal.send(reducer?.payload as? GranitePayload)
+        }
+
+        await self.reducer?.executeStreaming(coordinator?.getState()) { [weak self] newState in
+            DispatchQueue.main.async {
+                self?.updateState(newState)
+            }
+        }
+
+        for signal in (sideEffects[.after] ?? []) {
+            signal.send(reducer?.payload as? GranitePayload)
+        }
+    }
+
     func updateState(_ newState: AnyGraniteState) {
         self.coordinator?.setState(newState)
         //self?.coordinator?.persistStateChanges()
