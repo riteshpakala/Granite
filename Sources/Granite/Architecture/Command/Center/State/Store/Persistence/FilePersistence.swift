@@ -51,13 +51,21 @@ final public class FilePersistence : AnyPersistence {
         let rootPath: URL
         
         func getDefaultURL() -> URL {
+            #if os(macOS)
+            let value = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            #else
             let value = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            #endif
             return value.appendingPathComponent("granite-file-persistance")
         }
+        
         switch kind {
         case .basic:
             rootPath = getDefaultURL()
         case .group(let id):
+            #if os(macOS)
+            rootPath = getDefaultURL()
+            #else
             let groupURL = FileManager
                 .default
                 .containerURL(
@@ -65,6 +73,7 @@ final public class FilePersistence : AnyPersistence {
                 .appendingPathComponent("granite-file-persistance")
             
             rootPath = groupURL ?? getDefaultURL()
+            #endif
         }
         
         self.key = key
@@ -91,7 +100,7 @@ final public class FilePersistence : AnyPersistence {
                 let data = try encoder.encode(state)
                 
                 try data.write(to: self.url)
-                
+    
                 //GraniteLog(self.key, level: .info)
             }
             catch let error {
