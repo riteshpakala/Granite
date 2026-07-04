@@ -181,7 +181,10 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         store
             .container
             .objectWillChange
-            .throttle(for: .seconds(0.0167), scheduler: RunLoop.main, latest: true)
+            // DispatchQueue.main, not RunLoop.main: the RunLoop scheduler only fires in
+            // the default run-loop mode, so state → UI delivery froze for as long as a
+            // finger was down (touch tracking runs the loop in UITrackingRunLoopMode).
+            .throttle(for: .seconds(0.0167), scheduler: DispatchQueue.main, latest: true)
             .sink { [unowned self] _ in
             DispatchQueue.main.async { [weak self] in
                 self?.objectWillChange.send()
