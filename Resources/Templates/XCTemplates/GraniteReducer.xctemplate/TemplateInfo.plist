@@ -8,31 +8,43 @@
 	<array>
 		<string>public.swift-source</string>
 	</array>
-	<key>Platforms</key>
-	<array>
-		<string>com.apple.platform.iphoneos</string>
-	</array>
 	<key>DefaultCompletionName</key>
-	<string>Granite Reducer</string>
+	<string>GraniteReducer</string>
 	<key>Description</key>
-	<string>Module of a Reducer for Granite Arch</string>
+	<string>A Granite reducer.</string>
+	<key>Summary</key>
+	<string>A Granite reducer.</string>
 	<key>Kind</key>
 	<string>Xcode.IDEKit.TextSubstitutionFileTemplateKind</string>
 	<key>MainTemplateFile</key>
-	<string>___FILEBASENAME___</string>
+	<string>___FILEBASENAME___.swift</string>
 	<key>SortOrder</key>
-	<integer>1</integer>
+	<integer>3</integer>
 	<key>Options</key>
 	<array>
 		<dict>
 			<key>Description</key>
-			<string>Empty</string>
+			<string>The name of the reducer.</string>
 			<key>Identifier</key>
 			<string>productName</string>
 			<key>Name</key>
-			<string>Name</string>
+			<string>Reducer name:</string>
 			<key>Required</key>
 			<string>YES</string>
+			<key>Type</key>
+			<string>text</string>
+		</dict>
+		<dict>
+			<key>Description</key>
+			<string>The GraniteCenter this reducer mutates (its Center typealias).</string>
+			<key>Identifier</key>
+			<string>centerName</string>
+			<key>Name</key>
+			<string>Center type:</string>
+			<key>Required</key>
+			<string>YES</string>
+			<key>Default</key>
+			<string>Center</string>
 			<key>Type</key>
 			<string>text</string>
 		</dict>

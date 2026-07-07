@@ -104,7 +104,7 @@ public struct GraniteNavigationStyle {
 }
 
 private struct GraniteNavigationStyleKey: EnvironmentKey {
-    public static let defaultValue: GraniteNavigationStyle = .init() { }
+    public static var defaultValue: GraniteNavigationStyle { .init() { } }
 }
 
 extension EnvironmentValues {
@@ -182,7 +182,7 @@ public struct GraniteNavigationDestinationStyle {
 }
 
 private struct GraniteNavigationDestinationStyleKey: EnvironmentKey {
-    static let defaultValue: GraniteNavigationDestinationStyle = .init()
+    static var defaultValue: GraniteNavigationDestinationStyle { .init() }
 }
 
 public extension EnvironmentValues {
@@ -193,7 +193,7 @@ public extension EnvironmentValues {
 }
 
 private struct GraniteNavigationWindowDestinationStyleKey: EnvironmentKey {
-    static let defaultValue: GraniteNavigationDestinationStyle? = nil
+    static var defaultValue: GraniteNavigationDestinationStyle? { nil }
 }
 
 public extension EnvironmentValues {

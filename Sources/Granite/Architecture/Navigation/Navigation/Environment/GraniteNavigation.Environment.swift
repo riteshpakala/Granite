@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 struct GraniteNavigationPassthroughEventKey: EnvironmentKey {
-    public static var defaultValue: Bool = false
+    public static var defaultValue: Bool { false }
 }
 
 extension EnvironmentValues {
@@ -20,7 +20,9 @@ extension EnvironmentValues {
 }
 
 public struct GraniteNavigationRouterKey: EnvironmentKey {
-    public static var defaultValue: GraniteNavigation.Router = GraniteNavigation.main.asRouter
+    // Points at the main router by id without touching main-actor navigation state, so the
+    // default is usable from the nonisolated EnvironmentKey requirement.
+    public static var defaultValue: GraniteNavigation.Router { .init(id: "granite.app.main.router") }
 }
 
 public extension EnvironmentValues {
@@ -48,7 +50,7 @@ extension UINavigationController: UIGestureRecognizerDelegate {
 #endif
 
 public struct GraniteNavigationAnimationKey: EnvironmentKey {
-    public static var defaultValue: Bool = false
+    public static var defaultValue: Bool { false }
 }
 
 public extension EnvironmentValues {
@@ -60,10 +62,10 @@ public extension EnvironmentValues {
 
 public struct GraniteNavigationShowingKey: EnvironmentKey {
     #if os(iOS) || os(visionOS)
-    public static var defaultValue: Bool = false
+    public static var defaultValue: Bool { false }
     #else
     //TODO: maybe needs more thought or more properties exposed to give navigation context
-    public static var defaultValue: Bool = true
+    public static var defaultValue: Bool { true }
     #endif
 }
 

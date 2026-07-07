@@ -34,7 +34,9 @@ public typealias GraniteDisplayLink = CVDisplayLink
 #if canImport(UIKit)
 import UIKit
 
-open class DisplayLinkTimer: NSObject {
+// `@unchecked Sendable`: the timer owns its display link and dispatches through it with weak
+// self; the internal state is only touched from those callbacks.
+open class DisplayLinkTimer: NSObject, @unchecked Sendable {
     var displayLink: GraniteDisplayLink?
     
     var lastTime: CMTime = .zero
@@ -76,7 +78,9 @@ import AppKit
 import CoreVideo
 import Cocoa
 
-open class DisplayLinkTimer: NSObject {
+// `@unchecked Sendable`: the timer owns its CVDisplayLink + serial operation queue and only
+// touches its state from those callbacks (with weak self).
+open class DisplayLinkTimer: NSObject, @unchecked Sendable {
     lazy var operation: OperationQueue = {
         var op = OperationQueue.init()
         op.qualityOfService = .background

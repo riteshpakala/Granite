@@ -106,7 +106,7 @@ extension Keychain {
 
 public class UserData: NSObject, Codable, NSSecureCoding {
     
-    public static var supportsSecureCoding: Bool = true
+    public static var supportsSecureCoding: Bool { true }
     
     public let email: String
 

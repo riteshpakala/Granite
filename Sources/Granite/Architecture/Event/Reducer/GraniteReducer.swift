@@ -125,9 +125,15 @@ public enum GraniteReducerInteraction {
     case basic
 }
 
+/// A unit of logic that mutates a center's state.
+///
+/// Implement one of the `reduce(state:)` overloads to mutate `inout` state synchronously,
+/// asynchronously (with `behavior` set to `.task`), or as a stream (`.streamingTask`). Declare
+/// follow-up work — including chaining sibling reducers — by returning a ``GraniteEffect`` from
+/// ``effect(state:)``. See <doc:ReducersAndEvents>.
 public protocol GraniteReducer: AnyGraniteReducer {
     typealias Reducer = GraniteReducerExecutable<Self>
-    
+
     associatedtype Center: GraniteCenter
     associatedtype Metadata: GranitePayload = EmptyGranitePayload
     
@@ -139,10 +145,19 @@ public protocol GraniteReducer: AnyGraniteReducer {
     /// coordinator on the main thread so every mutation is immediately visible to SwiftUI.
     func reduce(state: inout Center.GenericGraniteState,
                 stream: @escaping (Center.GenericGraniteState) -> Void) async
-    
+
+    /// Declares follow-up work to run after this reducer commits, as a ``GraniteEffect``.
+    /// Return `.none` (the default) for no side effects. Override this to chain sibling
+    /// reducers (`.chain`) or run async work (`.run`) in a type-safe way instead of via
+    /// reflection-based `@Event(.after)` forwarding.
+    func effect(state: Center.GenericGraniteState) -> GraniteEffect
+
+    /// Payload-aware variant of ``effect(state:)``. Defaults to calling ``effect(state:)``.
+    func effect(state: Center.GenericGraniteState, payload: Metadata) -> GraniteEffect
+
     var thread: DispatchQueue? { get }
     var behavior: GraniteReducerBehavior { get }
-    
+
     init()
 }
 
@@ -170,6 +185,11 @@ extension GraniteReducer {
     public func reduce(state: inout Center.GenericGraniteState, payload: Metadata) async {}
     public func reduce(state: inout Center.GenericGraniteState,
                        stream: @escaping (Center.GenericGraniteState) -> Void) async {}
+
+    public func effect(state: Center.GenericGraniteState) -> GraniteEffect { .none }
+    public func effect(state: Center.GenericGraniteState, payload: Metadata) -> GraniteEffect {
+        effect(state: state)
+    }
 }
 
 public protocol EventExecutable {
@@ -200,6 +220,8 @@ public protocol EventExecutable {
     func update(_ payload: GranitePayload?)
     func execute(_ state: AnyGraniteState?) -> AnyGraniteState
     func executeAsync(_ state: AnyGraniteState?) async -> AnyGraniteState
+    /// Resolves the ``GraniteEffect`` this reducer declares for the given committed state.
+    func resolveEffect(_ state: AnyGraniteState?) -> GraniteEffect
     func executeStreaming(_ state: AnyGraniteState?,
                          stream: @escaping (AnyGraniteState) -> Void) async
     init()
@@ -252,8 +274,17 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     
     private var payloadFindAttempted: Bool = false
     public var payload : AnyGranitePayload?
+
+    /// Memoized reflection. A reducer's `@Event` children are fixed for its lifetime, so we
+    /// reflect over `expedition` exactly once instead of on every access — the previous
+    /// behavior, which the engine's own notes flagged as a cause of slow component boot
+    /// (each `events` read walked the Mirror tree again, recursively for nested events).
+    private var cachedEvents: [AnyEvent]? = nil
     public var events : [AnyEvent] {
-        expedition.findEvents()
+        if let cachedEvents { return cachedEvents }
+        let found = expedition.findEvents()
+        cachedEvents = found
+        return found
     }
     public var isNotifiable : Bool {
         expedition.notifiable
@@ -288,12 +319,16 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     }
     
     deinit {
+        // Cancel only THIS instance's subscriptions. We deliberately do NOT call
+        // `expedition.beam.removeObservers()` / `expedition.broadcast.removeObservers()`
+        // here: `beam` and `broadcast` are type-shared signals (keyed by reducer type in
+        // `Storage`), so `removeObservers()` would wipe the shared Prospector node holding
+        // EVERY live instance's observers — tearing down sibling components' subscriptions.
+        // Cancelling the per-instance cancellables removes exactly this instance's observer.
         beamCancellables.forEach { $0.cancel() }
         beamCancellables.removeAll()
-        expedition.beam.removeObservers()
         broadcastCancellables.values.forEach { $0.cancel() }
         broadcastCancellables = [:]
-        expedition.broadcast.removeObservers()
         bubbledCancellables.values.forEach { $0.cancel() }
         bubbledCancellables = [:]
     }
@@ -333,6 +368,16 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
         find()
 
         await expedition.reduce(state: &mutableState, stream: { stream($0) })
+    }
+
+    public func resolveEffect(_ state: AnyGraniteState?) -> GraniteEffect {
+        guard let typedState = state as? Expedition.Center.GenericGraniteState else { return .none }
+        find()
+        if let payload = self.payload as? Expedition.Metadata {
+            return expedition.effect(state: typedState, payload: payload)
+        } else {
+            return expedition.effect(state: typedState)
+        }
     }
 
     public func setOnline(_ isOnline: Bool) {

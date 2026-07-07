@@ -1,11 +1,13 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
 let package = Package(
     name: "Granite",
-    platforms: [.iOS(.v17), .macOS(.v12)], //Deployment set to v11, for ARM Big Sur+ usage only
+    // visionOS is supported in source; it is now declared explicitly. macOS 12 (Monterey)
+    // is the floor — actors/Sendable back-deploy below it, so no bump was required.
+    platforms: [.iOS(.v17), .macOS(.v12), .visionOS(.v1)],
     products: [
         .library(
             name: "Granite",
@@ -13,24 +15,28 @@ let package = Package(
         .library(
             name: "GraniteUI",
             targets: ["GraniteUI"]),
-        
+
     ],
     dependencies: [
-        // Dependencies declare other packages that this package depends on.
-        // .package(url: /* package url */, from: "1.0.0"),
+        // Swift-DocC plugin: enables `swift package generate-documentation --target Granite`.
+        .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.3.0"),
     ],
     targets: [
         .target(
             name: "Granite",
-            dependencies: []),
+            dependencies: [],
+            swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "GraniteTests",
-            dependencies: ["Granite"]),
+            dependencies: ["Granite"],
+            swiftSettings: [.swiftLanguageMode(.v6)]),
         .target(
             name: "GraniteUI",
-            dependencies: []),
+            dependencies: [],
+            swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "GraniteUITests",
-            dependencies: ["GraniteUI"]),
+            dependencies: ["GraniteUI"],
+            swiftSettings: [.swiftLanguageMode(.v6)]),
     ]
 )

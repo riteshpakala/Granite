@@ -50,7 +50,7 @@ extension Findable {
         let children = mirror.children
 
         //TODO: I do not think, filter is reqd. w/ compactMap
-        var events = children.filter { $0.value as? AnyEvent != nil }.compactMap { $0.value as? AnyEvent }
+        let events = children.filter { $0.value as? AnyEvent != nil }.compactMap { $0.value as? AnyEvent }
         
         return events
     }
@@ -63,7 +63,7 @@ extension Findable {
         let mirror = Mirror(reflecting: self)
         let children = mirror.children
 
-        var events = children.filter { $0.value as? CompileableEvent != nil }.compactMap { $0.value as? CompileableEvent }
+        let events = children.filter { $0.value as? CompileableEvent != nil }.compactMap { $0.value as? CompileableEvent }
         
         return events
     }
@@ -72,7 +72,7 @@ extension Findable {
         let mirror = Mirror(reflecting: self)
         let children = mirror.children
 
-        var events = children.filter { $0.value as? AnyNotify != nil }.compactMap { $0.value as? AnyNotify }
+        let events = children.filter { $0.value as? AnyNotify != nil }.compactMap { $0.value as? AnyNotify }
         
         return events
     }

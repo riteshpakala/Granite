@@ -26,6 +26,10 @@ public protocol AnyGraniteCenter: Bindable, Findable {
  Stores a GraniteComponent's and GraniteService's Vitals.
  GraniteState and GraniteEvents specifically.
 */
+/// The state-and-events container for a ``GraniteComponent`` (or ``GraniteService``).
+///
+/// A center declares the feature's `@Store` state and its `@Event` reducers. Granite reflects
+/// over the center once, when its command compiles, to discover and wire these members.
 public protocol GraniteCenter: AnyGraniteCenter {
     associatedtype GenericGraniteState: GraniteState
     var state: GenericGraniteState { get set }

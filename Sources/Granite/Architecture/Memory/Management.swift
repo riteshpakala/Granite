@@ -10,9 +10,10 @@
 import Foundation
 
 public extension GraniteMemory {
-    class Management {
+    // Stateless diagnostics helper (no stored properties), so it is trivially Sendable.
+    final class Management: Sendable {
         public init() {
-            
+
         }
         
         public func addBlock(id: UUID, label: String = "memory-block") {

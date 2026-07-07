@@ -82,8 +82,10 @@ public struct GraniteNavigationWindowStyle {
     public static var `default`: GraniteNavigationWindowStyle {
         .init(size: GraniteNavigationWindowStyle.defaultSize)
     }
-    
-    public static var defaultSize: CGSize = .init(width: 360, height: 480)
+
+    // Window configuration is main-thread UI state; exposed nonisolated-unsafe for callers
+    // that read/set it during window setup.
+    nonisolated(unsafe) public static var defaultSize: CGSize = .init(width: 360, height: 480)
 }
 
 #if os(iOS) || os(visionOS)
@@ -99,18 +101,21 @@ public struct NSWindow {
 import AppKit
 import Combine
 
+@MainActor
 public class GraniteNavigationWindow {
-    public static var shared: GraniteNavigationWindow = .init()
-    
+    // macOS windowing is inherently main-thread; these shared statics aren't synchronized,
+    // so they are exposed nonisolated-unsafe under strict concurrency.
+    nonisolated(unsafe) public static var shared: GraniteNavigationWindow = .init()
+
     fileprivate var windows: [String : GraniteWindow] = [:]
     fileprivate var count: Int = 0
-    
+
     fileprivate var mainWindowId: String? = nil
-    
-    public static var defaultSize: CGSize = GraniteNavigationWindowStyle.defaultSize
-    public static var backgroundColor: NSColor = .clear
-    
-    public static var defaultMainWindowId: String = "granite.app.window.main"
+
+    nonisolated(unsafe) public static var defaultSize: CGSize = GraniteNavigationWindowStyle.defaultSize
+    nonisolated(unsafe) public static var backgroundColor: NSColor = .clear
+
+    nonisolated(unsafe) public static var defaultMainWindowId: String = "granite.app.window.main"
     
     public static func setMainWindow() {
         guard let window = NSApplication.shared.windows.first(where: { $0.isKeyWindow }) else {
@@ -180,7 +185,10 @@ public class GraniteNavigationWindow {
     }
 }
 
-/// Container to manage the NSWindow and its lifecycle/observers
+/// Container to manage the NSWindow and its lifecycle/observers.
+/// `@MainActor`: this wraps an `NSWindow` and acts as its delegate — all AppKit window
+/// work is main-thread only.
+@MainActor
 public class GraniteWindow: NSObject, Identifiable, NSWindowDelegate {
     @Published var isPrepared: Bool = false
     
@@ -231,38 +239,40 @@ public class GraniteWindow: NSObject, Identifiable, NSWindowDelegate {
         super.init()
     }
     
+    // Runs directly: the method is `@MainActor`, so it's already on the main thread and the
+    // previous `DispatchQueue.main.async` wrapper (which forced a non-Sendable `content`
+    // closure across the queue boundary) is unnecessary.
     public func build<Content: View>(_ props: GraniteRouteWindowProperties,
                                      show: Bool = false,
                                      @ViewBuilder content : (@escaping () -> Content)) {
-        DispatchQueue.main.async { [weak self] in
-            self?.main = AppWindow(props.updateCompact(self?.isAlert == true))
-            
-            self?.main?.delegate = self
-            
-            self?.titleBarHeight = self?.main?.titlebarHeight ?? 0
-            self?.isPrepared = true
-            
-            if self?.observeEvents == true {
-                self?.observe()
-            }
-            
-            self?.lastUpdate = .init()
-            
-            self?.main?.backgroundColor = GraniteNavigationWindow.backgroundColor
-            
-            self?.main?.contentViewController = NSHostingController(rootView: content()
-                .transformEnvironment(\.graniteNavigationWindowDestinationStyle, transform: { value in
-                    value?.titleBarHeight = self?.main?.titlebarHeight ?? NSWindow.defaultTitleBarHeight
-                }))
-            
-            self?.main?.contentMinSize = self?.size ?? .zero
-            self?.main?.minSize = self?.size ?? .zero
-            self?.main?.setFrame(.init(origin: self?.main?.frame.origin ?? .zero, size: self?.size ?? .zero), display: true)
-            
-            if show {
-                self?.toggle()
-                self?.main?.center()
-            }
+        let window = AppWindow(props.updateCompact(self.isAlert == true))
+        self.main = window
+
+        window.delegate = self
+
+        self.titleBarHeight = window.titlebarHeight
+        self.isPrepared = true
+
+        if self.observeEvents {
+            self.observe()
+        }
+
+        self.lastUpdate = .init()
+
+        window.backgroundColor = GraniteNavigationWindow.backgroundColor
+
+        window.contentViewController = NSHostingController(rootView: content()
+            .transformEnvironment(\.graniteNavigationWindowDestinationStyle, transform: { [weak window] value in
+                value?.titleBarHeight = window?.titlebarHeight ?? NSWindow.defaultTitleBarHeight
+            }))
+
+        window.contentMinSize = self.size
+        window.minSize = self.size
+        window.setFrame(.init(origin: window.frame.origin, size: self.size), display: true)
+
+        if show {
+            self.toggle()
+            window.center()
         }
     }
     
@@ -275,10 +285,8 @@ public class GraniteWindow: NSObject, Identifiable, NSWindowDelegate {
     func setSize(_ size: CGSize) {
         let sizeAdjusted: CGSize = .init(width: min(maxSize.width, size.width),
                                          height: min(maxSize.height, size.height + (titleBarHeight + NSWindow.defaultTitleBarHeight)))
-        DispatchQueue.main.async { [weak self] in
-            self?.main?.setSize(sizeAdjusted, defaultSize: self?.size ?? .zero)
-            self?.lastUpdate = .init()
-        }
+        self.main?.setSize(sizeAdjusted, defaultSize: self.size)
+        self.lastUpdate = .init()
     }
     
     public func toggle() {
@@ -309,22 +317,19 @@ public class GraniteWindow: NSObject, Identifiable, NSWindowDelegate {
     
     func observe() {
         pubClickedOutside.sink { [weak self] _ in
-            guard self?.isVisible == true else { return }
-            
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
+                guard self?.isVisible == true else { return }
                 self?.main?.close()
                 self?.isVisible = false
             }
         }.store(in: &cancellables)
-        
+
         //This will only fire if a registered navigation window is clicked
         //otherwise dismiss all other window types like an alert
         pubClickedInside.sink { [weak self] _ in
-            guard self?.isVisible == true else { return }
-            
-            guard self?.isAlert == true else { return }
-            
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
+                guard self?.isVisible == true else { return }
+                guard self?.isAlert == true else { return }
                 self?.main?.close()
                 self?.isVisible = false
             }
@@ -497,7 +502,9 @@ extension NSWindow {
         frame.height - contentLayoutRect.height
     }
     
-    public static var defaultTitleBarHeight: CGFloat {
+    // `nonisolated`: a plain constant that must be usable as a default value in the
+    // nonisolated `GraniteNavigationDestinationStyle` initializer.
+    nonisolated public static var defaultTitleBarHeight: CGFloat {
         28
     }
 }

@@ -101,7 +101,8 @@ public struct GraniteLogger {
             }
         }
     }
-    static var counters: Counters = .init()
+    // Diagnostic-only counters; racy increments are benign for logging.
+    nonisolated(unsafe) static var counters: Counters = .init()
     
     static func focusText(_ isFocused: Bool) -> String {
         return isFocused ? "🧪" : ""
@@ -190,7 +191,8 @@ public struct GraniteLogger {
         }
     }
     
-    public static var currentLevel: GraniteLogger.Level = .debug
+    // Set once at startup; reads are lock-free by design.
+    nonisolated(unsafe) public static var currentLevel: GraniteLogger.Level = .debug
 }
 
 @inline(__always) func GraniteLog(_ message: CustomStringConvertible,

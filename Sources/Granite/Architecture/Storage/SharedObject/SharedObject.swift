@@ -9,26 +9,9 @@ import Foundation
 import SwiftUI
 import Combine
 
-class SharedObjectJobs {
-    static var shared: SharedObjectJobs = .init()
-    
-    var map: [Int : OperationQueue] = [:]
-    var threads: [Int : DispatchQueue] = [:]
-    
-    init() {}
-    
-    func create(_ key: Int) {
-        guard map[key] == nil else { return }
-        
-        self.threads[key] = .init(label: "granite.shared.repo.queue.\(key)", qos: .background)
-        self.map[key] = .init()
-        self.map[key]?.underlyingQueue = self.threads[key]
-        self.map[key]?.maxConcurrentOperationCount = 1
-    }
-}
-
 /// A property wrapper type for an observable object supplied with an id or created at the moment.
 @available(watchOS 6.0, tvOS 13.0, iOS 13.0, OSX 10.15, *)
+@MainActor
 @propertyWrapper
 public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: ObservableObject, ID: Hashable {
 	
@@ -59,6 +42,7 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
         container.pausable?.state = .normal
     }
     
+	@MainActor
 	public init(_ id: ID) where ObjectType: SharableObject {
         if let object = SharedRepository.getObject(for: id.hashValue) as? ObjectType {
             container = .init(wrappedValue: object, id: id)
@@ -67,30 +51,30 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
         }
 	}
 	
-	private final class Object<ObjectType: ObservableObject>: ObservableObject {
-        
-		var object: ObjectType
-        
+	private final class Object<Wrapped: ObservableObject>: ObservableObject {
+
+		var object: Wrapped
+
         /*
          This container is created wherever a @Relay is called.
          But, there's always only 1 relay instance.
-         
+
          We simply subscribe to each, propogate view updates.
          While maintaining data consistency in 1 singular location.
          */
-        
-        weak var pausable: PausableSinkSubscriber<ObjectType.ObjectWillChangePublisher.Output, Never>? = nil
-		
+
+        weak var pausable: PausableSinkSubscriber<Wrapped.ObjectWillChangePublisher.Output, Never>? = nil
+
         deinit {
             pausable?.cancel()
             pausable = nil
             Prospector.shared.node(for: self.id)?.remove(includeChildren: true)
             //GraniteLog("Shareable deinit", level: .debug)
         }
-        
+
         let id: UUID = .init()
-        
-		init(wrappedValue: ObjectType, id: ID) where ObjectType: SharableObject {
+
+		init(wrappedValue: Wrapped, id: ID) where Wrapped: SharableObject {
             self.object = wrappedValue
             
             let currentNodeId = Prospector.shared.currentNode?.id
@@ -99,11 +83,15 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
                                                     type: .relayNetwork)
             Prospector.shared.push(id: self.id, .relayNetwork)
             
+            // DispatchQueue.main (not RunLoop.main): RunLoop.main only fires in the
+            // default run-loop mode, so shared-object → UI delivery stalls while a finger
+            // is down (touch tracking runs in UITrackingRunLoopMode). This mirrors the fix
+            // already applied to GraniteCommand's component observer.
             pausable = wrappedValue
                 .objectWillChange
-                .debounce(for: .seconds(0.2), scheduler: RunLoop.main)
-                .pausableSink { [unowned self] _ in
-                self.objectWillChange.send()
+                .debounce(for: .seconds(0.2), scheduler: DispatchQueue.main)
+                .pausableSink { [weak self] _ in
+                self?.objectWillChange.send()
             }
             pausable?.state = .normal
             
@@ -128,7 +116,7 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
 			self.object = object
 		}
 		
-		subscript<Subject>(dynamicMember keyPath: ReferenceWritableKeyPath<ObjectType, Subject>) -> Binding<Subject> {
+		public subscript<Subject>(dynamicMember keyPath: ReferenceWritableKeyPath<ObjectType, Subject>) -> Binding<Subject> {
 			.init {
 				object[keyPath: keyPath]
 			} set: { newValue in
@@ -137,16 +125,44 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
 		}
 	}
 }
-final class SharedRepository {
-    
-    private static var objects: [Int: Any] = [:]
-    
+/// Process-wide registry backing every `@SharedObject` / `@Relay`.
+///
+/// Shared services (relays) are intentionally retained for the lifetime of the app: a
+/// `.online` relay is a singleton whose state must survive individual view teardown, so
+/// entries are **not** evicted automatically (auto-eviction on the last container's
+/// `deinit` would risk dropping and re-defaulting live service state during transient
+/// SwiftUI view churn). Callers that own a genuinely scoped service can release it
+/// explicitly via ``remove(for:)``.
+///
+/// Access is guarded by an internal lock (`@unchecked Sendable`) because the stored
+/// values are heterogeneous `Any` and are touched from both the main thread and reducer
+/// queues during service construction.
+final class SharedRepository: @unchecked Sendable {
+
+    static let shared = SharedRepository()
+
+    private let lock = NSLock()
+    private var objects: [Int: Any] = [:]
+
     static func getObject(for key: Int) -> Any? {
-        return objects[key]
+        shared.lock.lock()
+        defer { shared.lock.unlock() }
+        return shared.objects[key]
     }
-    
+
+    @discardableResult
     static func insert<ObjectType>(_ object: ObjectType, for key: Int) -> ObjectType {
-        objects[key] = object
+        shared.lock.lock()
+        defer { shared.lock.unlock() }
+        shared.objects[key] = object
         return object
+    }
+
+    /// Explicitly releases a shared object. Only safe when the caller knows no other
+    /// view still references the service (e.g. a scoped, single-owner relay).
+    static func remove(for key: Int) {
+        shared.lock.lock()
+        defer { shared.lock.unlock() }
+        shared.objects[key] = nil
     }
 }

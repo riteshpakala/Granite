@@ -12,10 +12,6 @@ The Granite architecture provides:
 - View Library. Granite comes with a comprehensive view library (GraniteUI) that can speed up development, offering thought out templates and other UX solutions.
 - Rapid prototyping, when bootstrapping ideas. Simultaneously making them testable and production ready.
   - Neatia as seen below took 2 weeks from the ground-up, to build. Given [Third-Party Packages](https://github.com/pexavc/Nea#swift-packages--credits) were used in the process.
-  
-### Thanks
-
-Also a huge shoutout to [@din](https://github.com/din). They have helped me through so much, when it came to learning iOS development, Metal, you name it. CS courses in University do not come close to their mentorship. The Signal idea comes from their interpretation of architecture: [Compose](https://github.com/din/compose)
 
 # High Level Overview
 
@@ -60,6 +56,7 @@ The architecture itself is still a WIP, but currently I have moved onto seeing i
 # Table of Contents
 
 - [XCTemplates](#XCTemplates)
+- [Documentation](#Documentation)
 - [Guide](#Guide)
 	- [GraniteComponent](#GraniteComponent) //Views
 	- [GraniteReducer](#GraniteReducer) //Business logic
@@ -71,11 +68,34 @@ The architecture itself is still a WIP, but currently I have moved onto seeing i
 	  - ***WIP***
 
 # XCTemplates
-Located in [/Resources/Templates](https://github.com/pexavc/Granite/tree/main/Resources/Templates)
+Granite ships Xcode file templates for Components, Services, and Reducers (in
+[/Resources/Templates/XCTemplates](https://github.com/pexavc/Granite/tree/main/Resources/Templates/XCTemplates)).
 
-Move XCTemplate files to this location: `~/Library/Developer/Xcode/Templates/Modules`
+Install them on a new machine with one command:
 
-They will appear as modules within XCode for easy Component/Relay and Reducer creation when creating a new file.
+```bash
+Scripts/install-templates.sh
+```
+
+This copies the templates into `~/Library/Developer/Xcode/Templates/Granite`. Restart Xcode and
+they appear under a **Granite** section in **File ▸ New ▸ File…**.
+
+Options: `--symlink` (link the repo copies so edits take effect live), `--force` (overwrite an
+existing install), `--uninstall` (remove them), `--help`.
+
+
+# Documentation
+
+Granite ships a DocC catalog ([`Sources/Granite/Granite.docc`](Sources/Granite/Granite.docc)).
+Build it with:
+
+```bash
+Scripts/build-docs.sh              # build a .doccarchive (open it in Xcode)
+Scripts/build-docs.sh --preview    # live preview at localhost
+Scripts/build-docs.sh --static --base-path Granite   # static HTML for GitHub Pages → ./docs
+```
+
+Inside Xcode you can also use **Product ▸ Build Documentation** (⌃⌘D).
 
 
 # Guide

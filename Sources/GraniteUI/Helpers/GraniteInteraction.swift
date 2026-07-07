@@ -13,7 +13,9 @@ public struct GraniteInteraction {
     public struct Tranlate {
         public let point: CGPoint
         
-        public static var publisher = NotificationCenter.default.publisher(for: Notification.Name(rawValue: "granite_interaction_translate"))
+        public static var publisher: NotificationCenter.Publisher {
+            NotificationCenter.default.publisher(for: Notification.Name(rawValue: "granite_interaction_translate"))
+        }
     }
 }
 

@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 public struct GraniteEventKey: EnvironmentKey {
-    public static var defaultValue: EventExecutable? = nil
+    public static var defaultValue: EventExecutable? { nil }
 }
 
 public extension EnvironmentValues {

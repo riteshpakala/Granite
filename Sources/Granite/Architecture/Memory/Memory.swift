@@ -7,6 +7,6 @@
 
 import Foundation
 
-public class GraniteMemory {
+public final class GraniteMemory: Sendable {
     public static let management: Management = .init()
 }
