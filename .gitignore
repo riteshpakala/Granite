@@ -35,6 +35,10 @@ playground.xcworkspace
 
 .build/
 
+# Generated DocC static site (Scripts/build-docs.sh --static). Remove this line if you
+# publish documentation from a committed /docs folder.
+/docs/
+
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However
@@ -64,3 +68,4 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+.claude/settings.json

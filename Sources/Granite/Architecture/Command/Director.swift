@@ -19,6 +19,9 @@ protocol Director: AnyObject {
     func getState() -> AnyGraniteState
     func setState(_ state: AnyGraniteState)
     func notify(_ reducerType: AnyGraniteReducer.Type, payload: AnyGranitePayload?)
+    /// Fires a sibling reducer of the given type in this command, used by
+    /// ``GraniteEffect/chain(_:payload:)`` to chain reducers within a center.
+    func dispatch(_ reducerType: AnyGraniteReducer.Type, payload: GranitePayload?)
 }
 
 extension Director {

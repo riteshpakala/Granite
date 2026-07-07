@@ -21,43 +21,36 @@ public extension GraniteNavigationDestinationStyle {
 //MARK: Component
 public struct NavigationPassthroughComponent<Component: GraniteComponent, Payload: GranitePayload>: View {
     
-    class Screen<Component: GraniteComponent, Payload: GranitePayload> {
-        
-        var component: (() -> Component)
+    // `@MainActor`: a Screen builds and stores SwiftUI views, which is main-thread work.
+    @MainActor
+    class Screen<C: GraniteComponent, P: GranitePayload> {
+
+        var component: (() -> C)
         var view: AnyView? = nil
-        var payload: Payload?
+        var payload: P?
         var style: GraniteNavigationDestinationStyle?
-        
-        init(_ component: @escaping (() -> Component), _ payload: Payload? = nil) {
-            
+
+        init(_ component: @escaping (() -> C), _ payload: P? = nil) {
+
             self.component = component
             self.payload = payload
         }
-        
+
+        // Builds the destination view on the main actor. (Previously this hopped to a
+        // background queue to build the component and back to main to apply it; SwiftUI view
+        // construction must happen on the main actor, so the hop was both unsafe and moot.)
         func build(completion: (() -> Void)? = nil) {
-            DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-                let componentBuilt = self?.component()
-                
-                //TODO: remove payload building logic, in favor of EnvironmentValues
-                //fire once
-                //componentBuilt?.locate?.command.build(.dependency(self?.payload))
-                
-                GraniteLog("building screen")
-                
-                DispatchQueue.main.async { [weak self] in
-                    guard let componentFinal = componentBuilt else { return }
-                    
-                    if let gnds = componentFinal.view as? (any GraniteNavigationDestination) {
-                        self?.style = gnds.destinationStyle
-                    }
-                    self?.view = AnyView(componentFinal)
-                    
-                    GraniteLog("applying style and setting screen")
-                    completion?()
-                }
+            let componentFinal = self.component()
+
+            if let gnds = componentFinal.view as? (any GraniteNavigationDestination) {
+                self.style = gnds.destinationStyle
             }
+            self.view = AnyView(componentFinal)
+
+            GraniteLog("applying style and setting screen")
+            completion?()
         }
-        
+
         func clean() {
             self.view = nil
         }

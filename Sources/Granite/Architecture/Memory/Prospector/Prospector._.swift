@@ -37,7 +37,10 @@ public class Prospector : Prospect {
         scope.append(self.id)
     }
     
-    static let shared = Prospector()
+    // The Prospector graph is mutated during component/reducer construction, largely on the
+    // main thread. It is not internally synchronized (a known limitation), so the shared
+    // instance is exposed as `nonisolated(unsafe)` rather than pretending it is Sendable.
+    nonisolated(unsafe) static let shared = Prospector()
     
     var nodes = NSMapTable<NSString, Prospect>.strongToWeakObjects()
     var scope = [UUID]()

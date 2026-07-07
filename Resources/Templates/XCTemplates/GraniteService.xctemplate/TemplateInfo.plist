@@ -8,12 +8,8 @@
 	<array>
 		<string>public.swift-source</string>
 	</array>
-	<key>Platforms</key>
-	<array>
-		<string>com.apple.platform.iphoneos</string>
-	</array>
 	<key>DefaultCompletionName</key>
-	<string>Granite Relay</string>
+	<string>GraniteService</string>
 	<key>Description</key>
 	<string>Module of a Relay for Granite Arch</string>
 	<key>Kind</key>

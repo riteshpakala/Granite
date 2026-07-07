@@ -40,7 +40,7 @@ public struct GraniteTabStyle {
 }
 
 private struct GraniteTabStyleKey: EnvironmentKey {
-    static let defaultValue: GraniteTabStyle = .init() { }
+    static var defaultValue: GraniteTabStyle { .init() { } }
 }
 
 extension EnvironmentValues {

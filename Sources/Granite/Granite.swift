@@ -21,12 +21,15 @@ extension AnyGraniteNotification where Self: RawRepresentable, Self.RawValue == 
     }
     
     public func post(delay: Double = .zero) {
+        // Capture the Sendable Notification.Name rather than `self` so the deferred closure
+        // doesn't send a potentially non-Sendable `Self` across the main-queue boundary.
+        let name = self.asNotification
         if delay > .zero {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                NotificationCenter.default.post(.init(name: self.asNotification))
+                NotificationCenter.default.post(.init(name: name))
             }
         } else {
-            NotificationCenter.default.post(.init(name: self.asNotification))
+            NotificationCenter.default.post(.init(name: name))
         }
     }
 }

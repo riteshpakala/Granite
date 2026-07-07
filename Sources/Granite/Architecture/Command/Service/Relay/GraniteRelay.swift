@@ -100,7 +100,10 @@ final public class GraniteRelay<Service: GraniteService>: Inspectable, Prospecta
         store
             .container
             .objectWillChange
-            .throttle(for: .seconds(0.0167), scheduler: RunLoop.main, latest: true)
+            // DispatchQueue.main, not RunLoop.main: RunLoop.main only fires in the default
+            // run-loop mode, so relay-backed UI stalled during touch tracking. Matches the
+            // fix already applied to GraniteCommand's component observer.
+            .throttle(for: .seconds(0.0167), scheduler: DispatchQueue.main, latest: true)
             .sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &cancellableBag)
@@ -124,6 +127,15 @@ final public class GraniteRelay<Service: GraniteService>: Inspectable, Prospecta
     
     public func notify(_ reducerType: AnyGraniteReducer.Type, payload: AnyGranitePayload?) {
         service.locate?.command.notify(reducerType, payload: payload)
+    }
+
+    /// Chains a sibling reducer within the relay's own reducer set (backs
+    /// ``GraniteEffect/chain(_:payload:)`` for service reducers).
+    public func dispatch(_ reducerType: AnyGraniteReducer.Type, payload: GranitePayload?) {
+        let matches = reducers.filter { $0.reducerType == reducerType }
+        for container in matches {
+            container.fire(payload)
+        }
     }
 }
 

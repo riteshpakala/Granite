@@ -22,7 +22,10 @@ extension Storage {
  Reducer and complex logic handling/routing
 */
 extension GraniteComponent {
-    public var id : UUID {
+    // `nonisolated`: GraniteComponent refines both `View` (main-actor isolated) and
+    // `Identifiable` (nonisolated). The `id` witness must be nonisolated to satisfy
+    // `Identifiable` without the conformance "crossing into main-actor code" under Swift 6.
+    nonisolated public var id : UUID {
         if let id = locate?.id {
             return id
         } else if let id = Storage.shared.value(at: Storage.ComponentIdentifierKey(id: String(describing: self), keyPath: \Self.self)) as? UUID {
@@ -40,10 +43,15 @@ public protocol AnyGraniteComponent {
     
 }
 
+/// A Granite component: a SwiftUI `View` whose logic lives in a ``GraniteCenter``.
+///
+/// Conformers hold a `@Command` and implement `view` (instead of `body`); Granite supplies the
+/// real SwiftUI `body`, wrapping `view` with geometry and lifecycle handling. See
+/// <doc:Components> and <doc:GettingStarted>.
 public protocol GraniteComponent: AnyGraniteComponent, Identifiable, View, Findable {
     associatedtype GenericGraniteCenter: GraniteCenter
     associatedtype ComponentView: View
-    
+
     var center: GenericGraniteCenter { get set }
     var listeners: Void { get }
     @ViewBuilder var view: Self.ComponentView { get }
@@ -51,7 +59,7 @@ public protocol GraniteComponent: AnyGraniteComponent, Identifiable, View, Finda
 
 extension GraniteComponent {
     //TODO: cache locate result
-    public var locate: Command<Self.GenericGraniteCenter>? {
+    nonisolated public var locate: Command<Self.GenericGraniteCenter>? {
         let mirror = Mirror(reflecting: self)
         let children = mirror.children
 

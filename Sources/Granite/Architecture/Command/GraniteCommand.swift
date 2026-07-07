@@ -52,10 +52,12 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         case none
     }
     
-    var thread: DispatchQueue {
-        .init(label: "\(id)", qos: .background)
-    }
-    
+    /// One serial queue per command, created once. The previous computed property
+    /// allocated a brand-new `DispatchQueue` on *every* access, which meant work
+    /// dispatched "onto the command's queue" actually landed on a different queue each
+    /// time — giving zero serialization guarantee and churning transient queues.
+    let thread: DispatchQueue
+
     internal var cancellables = Set<AnyCancellable>()
     public let id: UUID
     
@@ -95,6 +97,7 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
     init(_ kind: GraniteCommandKind, initialCenter: Center? = nil) {
         let id: UUID = .init()
         self.id = id
+        self.thread = DispatchQueue(label: "granite.command.\(id.uuidString)", qos: .userInitiated)
         self.kind = kind
         self.buildBehavior = .none
         
@@ -184,19 +187,21 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
             // DispatchQueue.main, not RunLoop.main: the RunLoop scheduler only fires in
             // the default run-loop mode, so state → UI delivery froze for as long as a
             // finger was down (touch tracking runs the loop in UITrackingRunLoopMode).
+            // The throttle already delivers on the main queue, so the sink runs on main —
+            // no redundant re-dispatch needed, and [weak self] avoids a crash if the
+            // command deallocates while a throttled tick is in flight.
             .throttle(for: .seconds(0.0167), scheduler: DispatchQueue.main, latest: true)
-            .sink { [unowned self] _ in
-            DispatchQueue.main.async { [weak self] in
+            .sink { [weak self] _ in
                 self?.objectWillChange.send()
-            }
-        }.store(in: &cancellables)
+            }.store(in: &cancellables)
         
         //Observed here, signal sent by Component+View
         didAppear = { [weak self] in
-            self?.thread.sync {
+            // Non-blocking: the previous `thread.sync` synchronously blocked the main
+            // thread (didAppear is invoked from SwiftUI's .onAppear) on a background queue,
+            // risking priority inversion. Fire the onAppear events asynchronously instead.
+            self?.thread.async { [weak self] in
                 self?.onAppear?.forEach { event in
-                //TODO: There is still some sort of lag in transitions
-                    
                     switch self?.buildBehavior {
                     case .dependency(let payload):
                         event.send(payload as? GranitePayload)
@@ -205,7 +210,7 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
                     }
                 }
             }
-            
+
             self?.lifecycle = .appeared
         }
         
@@ -288,6 +293,16 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         if let notify = notifies["\(reducerType)"] {
             GraniteLog("\(NAME) \(kind) notify: [\(reducerType)] | Main 🧵?: \(Thread.isMainThread)", level: .debug)
             notify.send(payload)
+        }
+    }
+
+    /// Fires every sibling reducer of the given type hosted by this command. Backs
+    /// ``GraniteEffect/chain(_:payload:)``: chaining a reducer that isn't declared as an
+    /// `@Event` in this center is a safe no-op.
+    public func dispatch(_ reducerType: AnyGraniteReducer.Type, payload: GranitePayload?) {
+        let matches = reducers.filter { $0.reducerType == reducerType }
+        for container in matches {
+            container.fire(payload)
         }
     }
 }

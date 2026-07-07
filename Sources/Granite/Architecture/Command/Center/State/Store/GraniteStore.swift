@@ -26,29 +26,29 @@ extension Storage {
 /*
  A GraniteState can be wrapped with a GraniteStore
  inwhich observers notify linked Components and Services.
+
+ `@unchecked Sendable`: the store's `@Published` properties are only ever mutated on the
+ main thread (the persistence layer hops back to main before applying restored state), and
+ `storage` is itself `Sendable`. The unchecked conformance lets the store be captured by the
+ background restore closures without tripping strict-concurrency checks.
 */
-public class GraniteStore<State : GraniteState>: ObservableObject, Nameable {
-    
+public class GraniteStore<State : GraniteState>: ObservableObject, Nameable, @unchecked Sendable {
+
     public let id = UUID()
-    
+
     let willChange: GraniteSignal.Payload<State>
     let didLoad: GraniteSignal
     //var didChange: (() -> Void)? = nil
-    
+
     @Published internal var state : State
     @Published var isLoaded : Bool
-    
-    var syncEnabled: Bool = false
-    var isSyncing: Bool = false
-    
+
     internal var cancellables = Set<AnyCancellable>()
-    //TODO: remove?
-    fileprivate var persistStateChangesCancellable : AnyCancellable? = nil
-    
+
     fileprivate let storage : AnyPersistence
-    
+
     let autoSave : Bool
-    
+
     public init(storage : AnyPersistence = EmptyPersistence(), autoSave: Bool = false) {
         self.storage = storage
         self.autoSave = autoSave
@@ -56,20 +56,23 @@ public class GraniteStore<State : GraniteState>: ObservableObject, Nameable {
         self.willChange = .init()
         self.didLoad = .init()
         self.isLoaded = autoSave == false
-        
+
         $state
             .removeDuplicates()
-            .debounce(for: .seconds(0.02), scheduler: RunLoop.main)
+            // DispatchQueue.main, not RunLoop.main: RunLoop.main only fires in the default
+            // run-loop mode, so autosaves would stall during active scrolling / touch
+            // tracking (UITrackingRunLoopMode) — the same pitfall fixed for UI delivery.
+            .debounce(for: .seconds(0.02), scheduler: DispatchQueue.main)
             .sink { [weak self] state in
-            if self?.autoSave == true && self?.isSyncing == false {
+            if self?.autoSave == true {
                 self?.persistence.save(state)
             }
         }.store(in: &cancellables)
-        
+
         $isLoaded
             .removeDuplicates()
             .sink { [weak self] status in
-                if status, let state = self?.state {
+                if status, self?.state != nil {
                     self?.didLoad.send()
                 }
         }.store(in: &cancellables)
@@ -91,11 +94,8 @@ public class GraniteStore<State : GraniteState>: ObservableObject, Nameable {
         cancellables.forEach {
             $0.cancel()
         }
-        
+
         cancellables.removeAll()
-        
-        persistStateChangesCancellable?.cancel()
-        persistStateChangesCancellable = nil
     }
 }
 

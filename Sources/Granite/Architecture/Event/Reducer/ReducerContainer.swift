@@ -20,7 +20,11 @@ extension Storage {
 protocol AnyReducerContainer {
     var id : UUID { get set }
     var label: String { get }
+    /// The reducer type this container hosts, used to route ``GraniteEffect/chain(_:payload:)``.
+    var reducerType: AnyGraniteReducer.Type? { get }
     func setup(_ coordinator: Director)
+    /// Fires this container's reducer with an optional payload.
+    func fire(_ payload: GranitePayload?)
 }
 
 //TODO: MAJOR
@@ -30,13 +34,28 @@ protocol AnyReducerContainer {
 //
 // 01/08/23 which is why we declare @Notify outside of reducers not within..................
 //
-class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectable, Nameable {
+// `@unchecked Sendable`: the container coordinates a reducer across its own serial queue
+// and structured-concurrency `Task`s. Its mutable state is only touched from that serial
+// queue / the reducer's task, so the unchecked conformance asserts that manual discipline.
+final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectable, Nameable, @unchecked Sendable {
     public var id : UUID = .init()
     
     public var label: String {
         reducer?.label ?? ""
     }
-    
+
+    var reducerType: AnyGraniteReducer.Type? {
+        reducer?.reducerType
+    }
+
+    func fire(_ payload: GranitePayload?) {
+        if let payload {
+            reducer?.send(payload)
+        } else {
+            reducer?.send()
+        }
+    }
+
     weak var coordinator: Director?
     
     var setState: ((AnyGraniteState) -> Void)?
@@ -49,16 +68,16 @@ class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectab
     private var isOnline: Bool
     private var executionTask: Task<Void, Error>? = nil
     
+    /// The container's single serial queue, created once in `init`. Reducer commits and
+    /// `notify` fan-out are serialized here. (Previously a computed `thread` property
+    /// allocated a fresh queue on every access, so `updateState` had no serialization
+    /// guarantee at all.)
     public let queue: DispatchQueue
-    
+
     var events: [AnyEvent] {
         reducer?.events ?? []
     }
-    
-    var thread: DispatchQueue {
-        .init(label: "\(id)", qos: .background)
-    }
-    
+
     init(_ reducer: Event,
                 isTimed: Bool = false,
                 interval: Double = 0.0,
@@ -186,16 +205,17 @@ class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectab
         }
         
         //TODO: this CAN be a queue, before it hits an after
-        
+
         if let newState = self.reducer?.execute(coordinator?.getState()) {
             updateState(newState)
+            runEffect(for: newState)
         }
-        
+
         for signal in (sideEffects[.after] ?? []){
             signal.send(reducer?.payload as? GranitePayload)
         }
     }
-    
+
     func executeAsync() async {
         
         //TODO: think about the necessity of before
@@ -210,8 +230,9 @@ class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectab
         
         if let newState = await self.reducer?.executeAsync(coordinator?.getState()) {
             updateState(newState)
+            runEffect(for: newState)
         }
-        
+
         for signal in (sideEffects[.after] ?? []){
             signal.send(reducer?.payload as? GranitePayload)
         }
@@ -227,9 +248,17 @@ class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectab
         }
 
         await self.reducer?.executeStreaming(coordinator?.getState()) { [weak self] newState in
+            // Drop frames once the streaming task has been cancelled (e.g. a newer send
+            // superseded this one) so a stale token no longer overwrites fresher state.
+            guard Task.isCancelled == false else { return }
             DispatchQueue.main.async {
                 self?.updateState(newState)
             }
+        }
+
+        // Effects run after the whole stream completes, against the latest state.
+        if let latest = coordinator?.getState() {
+            runEffect(for: latest)
         }
 
         for signal in (sideEffects[.after] ?? []) {
@@ -237,11 +266,32 @@ class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectab
         }
     }
 
+    /// Resolves and runs the ``GraniteEffect`` a reducer declares for its committed state.
+    /// This is the explicit, type-safe chaining path that complements `.before`/`.after`
+    /// signal forwarding. Effects always run *after* the state commit.
+    private func runEffect(for state: AnyGraniteState) {
+        guard let effect = reducer?.resolveEffect(state) else { return }
+        run(effect)
+    }
+
+    private func run(_ effect: GraniteEffect) {
+        switch effect.operation {
+        case .none:
+            break
+        case .chain(let reducerType, let payload):
+            coordinator?.dispatch(reducerType, payload: payload)
+        case .run(let work):
+            Task { await work() }
+        case .merge(let effects):
+            for effect in effects { run(effect) }
+        }
+    }
+
     func updateState(_ newState: AnyGraniteState) {
         self.coordinator?.setState(newState)
-        //self?.coordinator?.persistStateChanges()
-        
-        self.thread.async {
+
+        self.queue.async { [weak self] in
+            guard let self else { return }
             if let reducerType = self.reducer?.reducerType {
                 self.coordinator?.notify(reducerType,
                                          payload: self.reducer?.payload)

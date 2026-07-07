@@ -12,12 +12,17 @@ import Combine
 
 // MARK: GraniteService
 //
+/// Shared, view-less state and logic, exposed to components through a ``Relay``.
+///
+/// A service is like a component's ``GraniteCenter`` without a view: it owns `@Store` state and
+/// `@Event` reducers that any number of components can observe via `@Relay`. See
+/// <doc:ServicesAndRelays>.
 public protocol GraniteService {
     associatedtype GenericGraniteCenter: GraniteCenter
     var center: GenericGraniteCenter { get set }
-    
+
     var isLoaded: Bool { get }
-    
+
     init()
 }
 

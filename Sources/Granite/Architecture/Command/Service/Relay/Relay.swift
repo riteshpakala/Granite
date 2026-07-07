@@ -10,6 +10,7 @@ import Foundation
 import SwiftUI
 import Combine
 
+@MainActor
 public protocol AnyRelay {
     var id: UUID { get }
     func detach()
@@ -24,6 +25,9 @@ extension Relay: AnyRelay {
     }
 }
 
+// `@MainActor`: `@Relay` is a SwiftUI `DynamicProperty` backed by `@SharedObject`; it is only
+// ever used inside components/views, which are already main-actor isolated under Swift 6.
+@MainActor
 @propertyWrapper
 public struct Relay<Service: GraniteService> : DynamicProperty {
     

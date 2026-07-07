@@ -12,18 +12,24 @@ import SwiftUI
 
 //MARK: GraniteNavigation
 //Main stack
+@MainActor
 public final class GraniteNavigation: ObservableObject {
     
-    public struct Router {
+    // `Router` is a lightweight, Sendable value (it stores only a String id). Its *actions*
+    // touch main-actor navigation state, so those are `@MainActor`; the value itself is
+    // nonisolated so it can be constructed as an EnvironmentKey default.
+    public struct Router: Sendable {
         public let id: String
         public init(id: String) {
             self.id = id
         }
-        
+
+        @MainActor
         public var navigation: GraniteNavigation {
             GraniteNavigation.instance(for: id)
         }
-        
+
+        @MainActor
         public func push<C: View>(style: GraniteNavigationDestinationStyle = .init(),
                                   window: GraniteRouteWindowProperties? = nil,
                                   @ViewBuilder _ content: @escaping () -> C) {
@@ -31,13 +37,15 @@ public final class GraniteNavigation: ObservableObject {
                                  window: window,
                                  content)
         }
-        
+
+        @MainActor
         public func push<C: GraniteNavigationDestination>(window: GraniteRouteWindowProperties? = nil,
                                                           @ViewBuilder _ content: @escaping () -> C) {
             self.navigation.push(window: window,
                                  content)
         }
-        
+
+        @MainActor
         public func pop() {
             self.navigation.pop()
         }
@@ -65,8 +73,10 @@ public final class GraniteNavigation: ObservableObject {
         instance(for: key).asRouter
     }
     
-    static var mainSet: Bool = false
-    public static var main: GraniteNavigation = .init(isMain: true)
+    // App-wide navigation is main-thread UI state. It isn't internally synchronized, so the
+    // shared statics are exposed as `nonisolated(unsafe)` under strict concurrency.
+    nonisolated(unsafe) static var mainSet: Bool = false
+    nonisolated(unsafe) public static var main: GraniteNavigation = .init(isMain: true)
     private var children: [String : GraniteNavigation] = [:]
     
     var stackCount: Int {
@@ -76,19 +86,24 @@ public final class GraniteNavigation: ObservableObject {
     internal var isActive = [String : Bool]()
     
     let isMain: Bool
-    public init(isMain: Bool) {
-        let key: String
+    // `nonisolated` so the `main` static (a nonisolated global) can construct it. The main
+    // instance takes a branch that touches no other instance's isolated state; child
+    // instances are only ever created on the main actor (via `route`/`instance`), so the
+    // main-actor accesses are bridged with a synchronous `assumeIsolated`.
+    nonisolated public init(isMain: Bool) {
         if isMain {
-            key = "granite.app.main.router"
+            self.id = "granite.app.main.router"
+            self.isMain = true
             GraniteNavigation.mainSet = true
         } else {
-            key = "granite.app.main.router.child_\(GraniteNavigation.main.stackCount)"
-        }
-        self.id = key
-        self.isMain = isMain
-        
-        if !isMain {
-            GraniteNavigation.main.addChild(key, navigation: self)
+            self.isMain = false
+            self.id = MainActor.assumeIsolated {
+                "granite.app.main.router.child_\(GraniteNavigation.main.stackCount)"
+            }
+            let created = self
+            MainActor.assumeIsolated {
+                GraniteNavigation.main.addChild(created.id, navigation: created)
+            }
         }
     }
     

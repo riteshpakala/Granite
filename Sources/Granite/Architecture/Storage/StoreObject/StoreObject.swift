@@ -18,6 +18,7 @@ public protocol StoreableObject: ObservableObject {
 
 /// A property wrapper type for an observable object supplied with an id or created at the moment.
 @available(watchOS 6.0, tvOS 13.0, iOS 13.0, OSX 10.15, *)
+@MainActor
 @propertyWrapper
 public struct StoreObject<ObjectType, ID>: DynamicProperty where ObjectType: ObservableObject, ID: Hashable {
     
@@ -36,6 +37,7 @@ public struct StoreObject<ObjectType, ID>: DynamicProperty where ObjectType: Obs
         .init(container.object)
     }
     
+    @MainActor
     public init(_ id: ID) where ObjectType: StoreableObject {
         if let object = StoreRepository.getObject(for: id.hashValue) as? ObjectType {
             container = .init(wrappedValue: object, id: id)
@@ -44,27 +46,27 @@ public struct StoreObject<ObjectType, ID>: DynamicProperty where ObjectType: Obs
         }
     }
     
-    private final class Object<ObjectType: ObservableObject>: ObservableObject {
-        
+    private final class Object<Wrapped: ObservableObject>: ObservableObject {
+
         var cancellable: AnyCancellable?
-        var object: ObjectType
-        
+        var object: Wrapped
+
         let id: ID
-        
+
         deinit {
             cancellable?.cancel()
             StoreRepository.remove(for: id.hashValue)
             GraniteLog("Storeable deinit", level: .debug)
         }
-        
-        init(wrappedValue: ObjectType, id: ID) where ObjectType: StoreableObject {
+
+        init(wrappedValue: Wrapped, id: ID) where Wrapped: StoreableObject {
             self.object = wrappedValue
             self.id = id
-            
+
             cancellable = object
                 .objectWillChange
-                .sink { _ in
-                    self.objectWillChange.send()
+                .sink { [weak self] _ in
+                    self?.objectWillChange.send()
                 }
         }
     }
@@ -77,7 +79,7 @@ public struct StoreObject<ObjectType, ID>: DynamicProperty where ObjectType: Obs
             self.object = object
         }
         
-        subscript<Subject>(dynamicMember keyPath: ReferenceWritableKeyPath<ObjectType, Subject>) -> Binding<Subject> {
+        public subscript<Subject>(dynamicMember keyPath: ReferenceWritableKeyPath<ObjectType, Subject>) -> Binding<Subject> {
             .init {
                 object[keyPath: keyPath]
             } set: { newValue in
@@ -87,19 +89,33 @@ public struct StoreObject<ObjectType, ID>: DynamicProperty where ObjectType: Obs
     }
 }
 
-final class StoreRepository {
-    private static var objects: [Int: Any] = [:]
-    
+/// Process-wide registry backing every `@StoreObject`. Unlike ``SharedRepository`` these
+/// entries are reference-scoped: the owning ``StoreObject/Object`` removes its entry on
+/// `deinit`. Access is lock-guarded (`@unchecked Sendable`) because entries are `Any`.
+final class StoreRepository: @unchecked Sendable {
+
+    static let shared = StoreRepository()
+
+    private let lock = NSLock()
+    private var objects: [Int: Any] = [:]
+
     static func getObject(for key: Int) -> Any? {
-        return objects[key]
+        shared.lock.lock()
+        defer { shared.lock.unlock() }
+        return shared.objects[key]
     }
-    
+
+    @discardableResult
     static func insert<ObjectType>(_ object: ObjectType, for key: Int) -> ObjectType {
-        objects[key] = object
+        shared.lock.lock()
+        defer { shared.lock.unlock() }
+        shared.objects[key] = object
         return object
     }
-    
+
     static func remove(for key: Int) {
-        objects[key] = nil
+        shared.lock.lock()
+        defer { shared.lock.unlock() }
+        shared.objects[key] = nil
     }
 }
