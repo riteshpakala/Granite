@@ -73,7 +73,7 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         center.findStore()?.isLoaded == true
     }
     
-    var center: Center
+    public internal(set) var center: Center
     
     var lifecycle: GraniteLifecycle = .none
     
@@ -152,7 +152,7 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         store.willChange.bind("stateWillChange")
     }
     
-    func listen(_ id: UUID? = nil, _ listeners: () -> Void) {
+    public func listen(_ id: UUID? = nil, _ listeners: () -> Void) {
         //guard !listenersSet else { return }
         listenersSet = true
         
@@ -163,7 +163,7 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         GraniteLog("applying listeners to: \(NAME)", level: .debug)
     }
     
-    func removeListeners(_ id: UUID? = nil) {
+    public func removeListeners(_ id: UUID? = nil) {
         let id = id ?? self.id
         Prospector.shared.node(for: id)?.remove(includeChildren: true)
     }
