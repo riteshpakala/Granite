@@ -17,7 +17,7 @@ public enum KeychainError: Error {
     case archiveFailure(Error)
 }
 
-public protocol Keychain {
+protocol Keychain {
     associatedtype DataType: Codable
 
     var account: String { get set }
@@ -29,14 +29,14 @@ public protocol Keychain {
 }
 
 extension Keychain {
-    public func remove() throws {
+    func remove() throws {
         let status = SecItemDelete(keychainQuery() as CFDictionary)
         guard status == noErr || status == errSecItemNotFound else {
             throw KeychainError.secCallFailed(status)
         }
     }
 
-    public func retrieve() throws -> DataType {
+    func retrieve() throws -> DataType {
         var query = keychainQuery()
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         query[kSecReturnAttributes as String] = kCFBooleanTrue

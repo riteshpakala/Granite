@@ -34,6 +34,11 @@ extension AnyGraniteNotification where Self: RawRepresentable, Self.RawValue == 
     }
 }
 
+// TODO: Deprecate.
+// This used to be used to track macOS NSNotifications upon launch
+// via the attached AppDelegate. Ideally, we should not rely on
+// NSNotification for that anymore. We needed custom window spawn
+// behavior with a custom title bar which WindowGroup was not providing.
 public struct Granite {
     public struct App {
         public enum Lifecycle: String, AnyGraniteNotification {
