@@ -6,21 +6,12 @@
 //  Copyright © 2020 Stoic Collective, LLC. All rights reserved.
 //
 
-
 //TODO: This really shouldn't be accessible the way it is in ReduceContainer.swift
 //need to encapsulate it correctly so it is a retrievable option with other
 //types of throughput modifiers, like debounce, throttle, etc.
 
 import AVFoundation
 import Foundation
-
-extension Int {
-    public func randomBetween(_ secondNum: Int) -> Int{
-        guard secondNum > 0 else { return 0 }
-        
-        return Int.random(in: self..<secondNum)
-    }
-}
 
 #if os(iOS) || os(visionOS)
 import UIKit

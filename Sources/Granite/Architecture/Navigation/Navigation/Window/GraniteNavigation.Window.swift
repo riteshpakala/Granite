@@ -144,6 +144,16 @@ public class GraniteNavigationWindow {
                                          @ViewBuilder content : (@escaping () -> Content)) {
         
         let windowId: String = id ?? "Window_\(count)"
+
+        // Re-opening an id that is already on screen should surface that window,
+        // not build a second one over the top of it. Without this the previous
+        // `GraniteWindow` is dropped from the dictionary while its `NSWindow`
+        // stays visible — an orphan the app can no longer close or track.
+        if let existing = windows[windowId] {
+            existing.bringToFront()
+            return
+        }
+
         let windowSize: CGSize = props.style.size ?? GraniteNavigationWindow.defaultSize
         let minWindowSize: CGSize = props.style.minSize ?? windowSize
         windows[windowId] = .init(id: windowId, isMain: isMain, size: windowSize)
