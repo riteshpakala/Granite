@@ -394,15 +394,15 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     
     public func update(_ payload: GranitePayload?) {
         find()
-        //TODO: make sure it is okay that a nil check is not required
-        //Otherwise in notify requests and repetitive subsequent ones
-        //the last payload persists
-        if self.payload == nil {
-            //Covers typealias alternative
+
+        if self.payload == nil || self.payload is GranitePayload {
+            // Direct Metadata payloads are values, so each send must replace the previous
+            // value. Calling their default `update` implementation is intentionally a no-op.
             self.payload = payload
+        } else {
+            // A reflected @Payload wrapper owns stable storage and updates its container.
+            self.payload?.update(payload)
         }
-        //Covers property wrapper case
-        self.payload?.update(payload)
     }
     
     public func observe() {
@@ -434,7 +434,11 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     }
     
     public func send() {
-        self.payload?.clear()
+        if self.payload is GranitePayload {
+            self.payload = nil
+        } else {
+            self.payload?.clear()
+        }
         signal.send(nil)
     }
     

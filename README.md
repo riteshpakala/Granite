@@ -55,6 +55,7 @@ The architecture itself is still a WIP, but currently I have moved onto seeing i
 
 # Table of Contents
 
+- [App Project Generator](#app-project-generator)
 - [XCTemplates](#XCTemplates)
 - [Documentation](#Documentation)
 - [Guide](#Guide)
@@ -66,6 +67,52 @@ The architecture itself is still a WIP, but currently I have moved onto seeing i
 	  - [Lifecycle Reducers](#Lifecycle-Reducers)
 	- [GraniteRelay](#GraniteRelay) //Services
 	  - ***WIP***
+
+# App Project Generator
+
+Create a complete iOS, iPadOS, and macOS starting project with one command:
+
+```bash
+Scripts/create-granite-app.sh MyApp --bundle-id com.example.MyApp
+```
+
+Or double-click **Create Granite App.command** in Finder for an interactive Terminal launcher.
+It asks for the project name and a projects folder, defaulting to `~/Desktop`, then creates the
+project in `~/Desktop/MyApp` (using the name you supplied). The launcher copies Granite into
+`MyApp/Packages/Granite` and links that package with a relative path, so the generated app can be
+moved or shared without depending on the original Granite checkout location.
+
+The generator opens the new project in Xcode when run interactively. It creates shared
+`HomeComponent` and `SettingsComponent` GraniteComponents, `EnvironmentService` boot state, a persistent `ConfigService`
+for settings and usage data, native tabs on compact iOS, and native sidebar navigation on iPad
+and macOS. The official Granite logo and a small set of reusable SwiftUI views/extensions are
+included.
+
+When the shell generator is invoked directly from the Granite repository root, its default output
+is a sibling directory (`../MyApp`). From any other working directory, the default is `./MyApp`.
+The `.command` launcher uses its prompted projects folder instead.
+Pass `--copy-granite` when invoking the shell generator directly to get the same portable package
+layout.
+
+```text
+MyApp/
+├── Packages/Granite/    # Portable local Granite Swift package
+├── Shared/
+│   ├── Services/
+│   ├── Components/       # Home.swift → HomeComponent
+│   ├── Utilities/Extensions/
+│   ├── Views/
+│   └── App.swift
+├── iOS/
+├── macOS/
+└── MyApp.xcodeproj
+```
+
+The project uses Xcode filesystem-synchronized groups, so adding a file beneath `Shared`, `iOS`,
+or `macOS` adds it to the appropriate targets automatically. Run
+`Scripts/create-granite-app.sh --help` for output path, display name, development team, local
+Granite checkout, and non-interactive options. Xcode 16 or newer is required.
+
 
 # XCTemplates
 Granite ships Xcode file templates for Components, Services, and Reducers (in

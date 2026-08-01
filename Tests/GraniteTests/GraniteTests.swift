@@ -4,6 +4,45 @@ import Combine
 
 final class GraniteTests: XCTestCase {
 
+    private struct PayloadCenter: GraniteCenter {
+        struct State: GraniteState {
+            var value = 0
+        }
+
+        @Store var state: State
+    }
+
+    private struct DirectPayloadReducer: GraniteReducer {
+        typealias Center = PayloadCenter
+        typealias Metadata = Meta
+
+        struct Meta: GranitePayload {
+            let value: Int
+        }
+
+        func reduce(state: inout Center.State) {
+            state.value = -1
+        }
+
+        func reduce(state: inout Center.State, payload: Meta) {
+            state.value = payload.value
+        }
+    }
+
+    private struct WrappedPayloadReducer: GraniteReducer {
+        typealias Center = PayloadCenter
+
+        struct Meta: GranitePayload {
+            let value: Int
+        }
+
+        @Payload var meta: Meta?
+
+        func reduce(state: inout Center.State) {
+            state.value = meta?.value ?? -1
+        }
+    }
+
     // MARK: - Persistence (Phase 2: atomic/binary writes, versioned envelope, round-trip)
 
     private struct Sample: Codable, Equatable {
@@ -72,6 +111,38 @@ final class GraniteTests: XCTestCase {
 
         XCTAssertEqual(received, [1, 2])
         cancellable.cancel()
+    }
+
+    func testDirectReducerPayloadIsReplacedOnEveryUpdate() throws {
+        let reducer = DirectPayloadReducer.Reducer()
+
+        reducer.update(DirectPayloadReducer.Meta(value: 1))
+        let first = try XCTUnwrap(reducer.execute(PayloadCenter.State()) as? PayloadCenter.State)
+        XCTAssertEqual(first.value, 1)
+
+        reducer.update(DirectPayloadReducer.Meta(value: 2))
+        let second = try XCTUnwrap(reducer.execute(first) as? PayloadCenter.State)
+        XCTAssertEqual(second.value, 2)
+
+        reducer.send()
+        let withoutPayload = try XCTUnwrap(reducer.execute(second) as? PayloadCenter.State)
+        XCTAssertEqual(withoutPayload.value, -1)
+    }
+
+    func testWrappedReducerPayloadStillUpdatesAndClears() throws {
+        let reducer = WrappedPayloadReducer.Reducer()
+
+        reducer.update(WrappedPayloadReducer.Meta(value: 1))
+        let first = try XCTUnwrap(reducer.execute(PayloadCenter.State()) as? PayloadCenter.State)
+        XCTAssertEqual(first.value, 1)
+
+        reducer.update(WrappedPayloadReducer.Meta(value: 2))
+        let second = try XCTUnwrap(reducer.execute(first) as? PayloadCenter.State)
+        XCTAssertEqual(second.value, 2)
+
+        reducer.send()
+        let withoutPayload = try XCTUnwrap(reducer.execute(second) as? PayloadCenter.State)
+        XCTAssertEqual(withoutPayload.value, -1)
     }
 
     // MARK: - Storage thread-safety (Phase 1: lock-guarded registry)
