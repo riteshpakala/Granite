@@ -67,6 +67,13 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Pros
     private var timer: DisplayLinkTimer? = nil
     private var isOnline: Bool
     private var executionTask: Task<Void, Error>? = nil
+
+    /// Gate for `GraniteReducerBehavior.persistentStreamingTask`: true while an
+    /// execution owns the container. `NSLock` rather than the container's own
+    /// `queue` — commits can arrive ON that queue (debounce/throttle schedule
+    /// there), so a `queue.sync` gate would deadlock.
+    private let persistentStreamLock = NSLock()
+    private var isPersistentStreamRunning = false
     
     /// The container's single serial queue, created once in `init`. Reducer commits and
     /// `notify` fan-out are serialized here. (Previously a computed `thread` property
@@ -163,8 +170,30 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Pros
     }
     
     func commit(_ value: GranitePayload?) {
+        // A running `persistentStreamingTask` OWNS this container, so the send
+        // is dropped WHOLE — decided before `update(value)`, which is what
+        // keeps a dropped send from clobbering the payload the running
+        // execution may still read.
+        if case .persistentStreamingTask(let priority) = reducer?.behavior, isTimed == false {
+            guard claimPersistentStream() else {
+                GraniteLog("🛥: persistent stream already running, send dropped", level: .debug)
+                return
+            }
+
+            reducer?.update(value)
+
+            self.executionTask = Task(priority: priority) { [weak self] in
+                // The gate reopens however this ends — return, throw, or
+                // cancellation from somewhere other than `commit` — so a
+                // stream can never strand the container busy forever.
+                defer { self?.releasePersistentStream() }
+                await self?.executeStreamingAsync()
+            }
+            return
+        }
+
         reducer?.update(value)
-        
+
         //TODO: this can support the updation of multiple instances of the same component
         //make sure not to allow this timer to run independently in each
         if self.isTimed == true {
@@ -174,25 +203,46 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Pros
                     self?.timer = nil
                     return
                 }
-                
+
                 self?.execute()
             }
         } else {
-            self.executionTask?.cancel()
-
             switch reducer?.behavior {
             case .task(let priority):
+                // A new send REPLACES the in-flight execution.
+                self.executionTask?.cancel()
                 self.executionTask = Task(priority: priority) { [weak self] in
                     await self?.executeAsync()
                 }
             case .streamingTask(let priority):
+                self.executionTask?.cancel()
                 self.executionTask = Task(priority: priority) { [weak self] in
                     await self?.executeStreamingAsync()
                 }
             default:
+                // Synchronous reducers never assigned `executionTask`, so the
+                // cancel that used to sit above this switch was always a
+                // no-op here.
                 self.execute()
             }
         }
+    }
+
+    /// Test-and-set in ONE acquisition: two sends can commit concurrently — a
+    /// `.basic` interaction with no `thread` override commits on the sender's
+    /// thread — so a read-then-write would let both claim the gate.
+    private func claimPersistentStream() -> Bool {
+        persistentStreamLock.lock()
+        defer { persistentStreamLock.unlock() }
+        guard isPersistentStreamRunning == false else { return false }
+        isPersistentStreamRunning = true
+        return true
+    }
+
+    private func releasePersistentStream() {
+        persistentStreamLock.lock()
+        isPersistentStreamRunning = false
+        persistentStreamLock.unlock()
     }
     
     func execute() {

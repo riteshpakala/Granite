@@ -249,7 +249,7 @@ extension View {
     }
     
     private func initUINavigation(_ backgroundColor: Color) {
-#if os(iOS) || os(visionOS)
+        #if os(iOS) || os(visionOS)
         //        UINavigationBar.appearance().isUserInteractionEnabled = false
         UINavigationBar.appearance().backgroundColor = UIColor(backgroundColor)
         //        UINavigationBar.appearance().barTintColor = .clear
@@ -268,7 +268,7 @@ extension View {
             UINavigationBar.appearance().standardAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
         }
-#endif
+        #endif
     }
     
     private func initNavigationView(disable: Bool,

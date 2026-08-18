@@ -33,7 +33,6 @@ public struct GraniteHook<T, O> {
     public init() {
         
     }
-    
 }
 
 @propertyWrapper
@@ -60,16 +59,9 @@ public struct GraniteHookAsync<T, O> {
     public init() {
         
     }
-    
 }
 
 extension GraniteActionable {
-//    public func hook<T, O>(_ action : (@escaping (T) -> O), at keyPath : KeyPath<Self, GraniteHook<T, O>.HookWrapper>) {
-//        self[keyPath: keyPath].action = { value in
-//            action(value)
-//        }
-//    }
-    
     public func hookAsync<T, O>(_ action : (@escaping (T) async -> O), at keyPath : KeyPath<Self, GraniteHookAsync<T, O>.AsyncHookWrapper>) {
         self[keyPath: keyPath].action = { value in
             await action(value)
