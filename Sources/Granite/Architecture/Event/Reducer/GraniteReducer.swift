@@ -98,11 +98,14 @@ public enum GraniteReducerBehavior {
     /// The initial state snapshot is passed in for reading, but the coordinator's state
     /// is never overwritten by the snapshot once the reducer finishes.
     case streamingTask(TaskPriority)
+    /// Streaming execution that a re-send may NOT cancel.
+    /// (a voice session, a device watcher, a subscription).
+    case persistentStreamingTask(TaskPriority)
     case none
 
     var isTask: Bool {
         switch self {
-        case .task, .streamingTask:
+        case .task, .streamingTask, .persistentStreamingTask:
             return true
         default:
             return false
@@ -111,7 +114,7 @@ public enum GraniteReducerBehavior {
 
     var priority: TaskPriority? {
         switch self {
-        case .task(let p), .streamingTask(let p):
+        case .task(let p), .streamingTask(let p), .persistentStreamingTask(let p):
             return p
         default:
             return nil
