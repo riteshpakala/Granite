@@ -54,8 +54,8 @@ final public class FilePersistence: AnyPersistence, @unchecked Sendable {
     }()
     private static let decoder = PropertyListDecoder()
 
-    /// Canonical persistence root folder name (corrected spelling).
-    private static let folderName = "GranitePersistence"
+    /// new folder name
+    private static let folderName = "granite-db"
     /// Legacy (misspelled) folder name, migrated on first use if present.
     private static let legacyFolderName = "granite-file-persistance"
 
