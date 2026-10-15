@@ -14,7 +14,7 @@ import Foundation
 */
 protocol Director: AnyObject {
     var lifecycle: GraniteLifecycle { get set }
-    var reducers: [AnyReducerContainer] { get set }
+    var reducers: [any GraniteEventContainer] { get set }
     func persistStateChanges()
     func getState() -> AnyGraniteState
     func setState(_ state: AnyGraniteState)

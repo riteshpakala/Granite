@@ -42,7 +42,7 @@ final public class GraniteRelay<Service: GraniteService>: Inspectable, Prospecta
     
     fileprivate var behavior: GraniteRelayBehavior = .normal
     
-    internal var reducers: [AnyReducerContainer] = []
+    internal var reducers: [any GraniteEventContainer] = []
     internal var cancellables = Set<AnyCancellable>()
     
     fileprivate var kind: GraniteRelayKind
@@ -89,9 +89,13 @@ final public class GraniteRelay<Service: GraniteService>: Inspectable, Prospecta
     }
     
     func bind() {
-        let events = self.findCompileableEvents()
-        
-        self.reducers = events.flatMap { $0.compile(self, properties: .init(isOnline: self.kind == .online)) }
+        let events = self.findEvents()
+        let properties = CompileableEventProperties(isOnline: self.kind == .online)
+        self.reducers = events.flatMap { event -> [any GraniteEventContainer] in
+            if let compileable = event as? CompileableEvent { return compileable.compile(self, properties: properties) }
+            if let custom = event as? GraniteCustomEvent { return custom.compile(with: GraniteEventHost(director: self, isOnline: self.kind == .online)) }
+            return []
+        }
     }
     var cancellableBag = Set<AnyCancellable>()
     func observe() {

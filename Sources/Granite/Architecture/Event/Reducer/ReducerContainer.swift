@@ -17,7 +17,7 @@ extension Storage {
     
 }
 
-protocol AnyReducerContainer {
+protocol AnyReducerContainer: GraniteEventContainer {
     var id : UUID { get set }
     var label: String { get }
     /// The reducer type this container hosts, used to route ``GraniteEffect/chain(_:payload:)``.
