@@ -30,7 +30,7 @@ public protocol AnyEvent: Bindable {
 }
 
 protocol CompileableEvent: Bindable {
-    func compile(_ coordinator: Director, properties: CompileableEventProperties) -> [AnyReducerContainer]
+    func compile(_ coordinator: Director, properties: CompileableEventProperties) -> [any GraniteEventContainer]
 }
 
 struct CompileableEventProperties {
@@ -104,14 +104,14 @@ public struct Event<Executable: EventExecutable>: AnyEvent {
 }
 
 extension CompileableEvent {
-    func compile(_ coordinator: Director) -> [AnyReducerContainer] {
+    func compile(_ coordinator: Director) -> [any GraniteEventContainer] {
         return compile(coordinator, properties: .empty)
     }
 }
 
 extension Event: CompileableEvent {
     //TODO: profile
-    func compile(_ coordinator: Director, properties: CompileableEventProperties) -> [AnyReducerContainer] {
+    func compile(_ coordinator: Director, properties: CompileableEventProperties) -> [any GraniteEventContainer] {
         let container: ReducerContainer<Executable>
         
         switch kind {
@@ -124,12 +124,16 @@ extension Event: CompileableEvent {
         
         container.setup(coordinator)
         
-        var containers: [AnyReducerContainer] = [container]
+        var containers: [any GraniteEventContainer] = [container]
         
         
         //TODO: allow expeditions to host events within them
         //Caveats, slow component boot times and state component mismatch
         for event in expedition.events {
+            if let custom = event as? GraniteCustomEvent {
+                containers += custom.compile(with: GraniteEventHost(director: coordinator, isOnline: properties.isOnline))
+                continue
+            }
             guard let compileableEvent = event as? CompileableEvent else {
                 continue
             }

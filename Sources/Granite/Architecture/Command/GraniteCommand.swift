@@ -86,7 +86,7 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
     var runTasks: (() -> Void)?
     
     //@Event public var discoveryDiagnostic: DiagnoseTree<Center>.Reducer
-    internal var reducers: [AnyReducerContainer] = []
+    internal var reducers: [any GraniteEventContainer] = []
     internal var notifies: [String: AnyNotify] = [:]
     
     internal var listenersSet: Bool = false
@@ -257,7 +257,14 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
             }
         }
         
-        reducers = (events).compactMap { $0 as? CompileableEvent }.flatMap { $0.compile(self, properties: .init(isOnline: kind.isOnline)) }
+        // Granite's own `@Event`s compile through `CompileableEvent`; a wrapper another package
+        // declares compiles through the public `GraniteCustomEvent` with a host onto this command.
+        let properties = CompileableEventProperties(isOnline: kind.isOnline)
+        reducers = events.flatMap { event -> [any GraniteEventContainer] in
+            if let compileable = event as? CompileableEvent { return compileable.compile(self, properties: properties) }
+            if let custom = event as? GraniteCustomEvent { return custom.compile(with: GraniteEventHost(director: self, isOnline: kind.isOnline)) }
+            return []
+        }
 
         self.onAppear = onAppearEvents.map { $0.signal }
         self.onDisappear = onDisappearEvents.map { $0.signal }
