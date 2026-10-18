@@ -13,6 +13,8 @@ import Foundation
  GraniteCommands'
 */
 protocol Director: AnyObject {
+    /// The host's scope. Reducer containers create their own scope beneath it.
+    var prospect: Prospect { get }
     var lifecycle: GraniteLifecycle { get set }
     var reducers: [any GraniteEventContainer] { get set }
     func persistStateChanges()

@@ -46,7 +46,7 @@ public enum GraniteCommandKind: CustomStringConvertible {
  A GraniteComponent's and GraniteService's Core event router,
  state manager, and responder.
 */
-public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prospectable, Director, Nameable, ObservableObject {
+public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Director, Nameable, ObservableObject {
     public enum BuildBehavior {
         case dependency(AnyGranitePayload?)
         case none
@@ -60,6 +60,16 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
 
     internal var cancellables = Set<AnyCancellable>()
     public let id: UUID
+
+    /// This command's scope. Its reducers' subscriptions and its listener sets live under it,
+    /// and all of them end when the command does. A component's command is re-parented under
+    /// its enclosing component's scope through the SwiftUI environment.
+    public let prospect: Prospect
+
+    /// One child scope per `listen` key, replaced on each `listen` and ended by
+    /// `removeListeners`. Guarded because hosts may drive appear/disappear off the main thread.
+    private let listenerLock = GraniteLock()
+    private var listenerScopes: [UUID: Prospect] = [:]
     
     public var isOnline: Bool {
         if case .service(.online) = kind {
@@ -100,17 +110,19 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         self.thread = DispatchQueue(label: "granite.command.\(id.uuidString)", qos: .userInitiated)
         self.kind = kind
         self.buildBehavior = .none
-        
-        Prospector.shared.currentNode?.addChild(id: self.id, label: String(reflecting: Self.self), type: .command)
-        Prospector.shared.push(id: self.id, .command)
-        center = initialCenter ?? Center()
-        setup()
-        Prospector.shared.pop(.command)
+
+        // Parented to whatever scope is bound while this command is built: a relay for a
+        // service's command, a parent command for a nested service, none for a component
+        // built lazily by `@StateObject` (the environment attaches it later).
+        let prospect = Prospect(id: id, label: String(reflecting: Self.self), type: .command)
+        self.prospect = prospect
+        center = prospect.withScope { initialCenter ?? Center() }
+        prospect.withScope { setup() }
     }
     
     deinit {
         lifecycle = .deLink
-        removeObservers(includeChildren: true)
+        prospect.cancel()
     }
     
     func build(_ buildBehavior: BuildBehavior) {
@@ -152,20 +164,29 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Prosp
         store.willChange.bind("stateWillChange")
     }
     
+    /// Runs `listeners` in a fresh child scope keyed by `id`, so every signal it observes
+    /// ends with ``removeListeners(_:)``. Listening again under the same key replaces the
+    /// previous set instead of stacking a duplicate.
     public func listen(_ id: UUID? = nil, _ listeners: () -> Void) {
-        //guard !listenersSet else { return }
         listenersSet = true
-        
-        Prospector.shared.node(for: self.id)?.addChild(id: id ?? self.id, label: "listeners", type: .listeners)
-        Prospector.shared.push(id: id ?? self.id, .listeners)
-        listeners()
-        Prospector.shared.pop(.listeners)
+
+        let key = id ?? self.id
+        let scope = prospect.child(label: "listeners", type: .listeners)
+        let previous = listenerLock.withLock { () -> Prospect? in
+            let previous = listenerScopes[key]
+            listenerScopes[key] = scope
+            return previous
+        }
+        previous?.cancel()
+
+        scope.withScope(listeners)
         GraniteLog("applying listeners to: \(NAME)", level: .debug)
     }
     
     public func removeListeners(_ id: UUID? = nil) {
-        let id = id ?? self.id
-        Prospector.shared.node(for: id)?.remove(includeChildren: true)
+        let key = id ?? self.id
+        let scope = listenerLock.withLock { listenerScopes.removeValue(forKey: key) }
+        scope?.cancel()
     }
     
     func observe() {

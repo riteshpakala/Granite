@@ -33,7 +33,7 @@ extension Publisher {
     }
 }
 
-class PausableSinkSubscriber<Input, Failure: Error>: Subscriber, AnyProspectNode {
+class PausableSinkSubscriber<Input, Failure: Error>: Subscriber {
     var id: UUID = .init()
     
     fileprivate class Storage {

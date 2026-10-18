@@ -27,12 +27,17 @@ public enum GraniteRelayKind {
  in Components and/or Reducers. When inside components changes
  will propogate view changes.
 */
-final public class GraniteRelay<Service: GraniteService>: Inspectable, Prospectable, Findable, Director, SharableObject, Nameable {
+final public class GraniteRelay<Service: GraniteService>: Inspectable, Findable, Director, SharableObject, Nameable {
     public static var initialValue: GraniteRelay<Service> {
         .init()
     }
     
     public let id : UUID = .init()
+
+    /// The relay's scope. Relays are app-lifetime singletons held by `SharedRepository`, so
+    /// the scope is top-level: it must never end because whichever view first touched the
+    /// relay went away.
+    public let prospect: Prospect
     
     var service: Service
     
@@ -52,18 +57,15 @@ final public class GraniteRelay<Service: GraniteService>: Inspectable, Prospecta
         self.kind = .offline
         self.isDiscoverable = isDiscoverable
         
-        Prospector.shared.currentNode?.addChild(id: self.id,
-                                                label: String(reflecting: Service.self),
-                                                type: .relay)
-        Prospector.shared.push(id: self.id, .relay)
-        service = Service()
-        setup()
-        Prospector.shared.pop(.relay)
+        let prospect = Prospect(id: id, label: String(reflecting: Service.self), type: .relay, parent: nil)
+        self.prospect = prospect
+        service = prospect.withScope { Service() }
+        prospect.withScope { setup() }
     }
     
     deinit {
         //GraniteLog("relay deinit 🛸: \(NAME)", level: .debug)
-        removeObservers(includeChildren: true)
+        prospect.cancel()
         cancellableBag.forEach { $0.cancel() }
         cancellableBag.removeAll()
     }

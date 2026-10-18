@@ -15,7 +15,7 @@ public struct DebugOverlayView: View {
                 Spacer()
 
                 Button {
-                    Prospector.shared.print()
+                    print(Prospector.dump())
                 } label: {
                     Text("Print Nodes")
                 }
