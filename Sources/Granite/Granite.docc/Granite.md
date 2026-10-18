@@ -67,6 +67,14 @@ struct Increment: GraniteReducer {
 - ``Event``
 - ``Notify``
 
+### Signals & Scopes
+
+- <doc:SignalsAndScopes>
+- ``GraniteSignal``
+- ``Prospect``
+- ``Prospector``
+- ``GraniteCancellable``
+
 ### Services & Relays
 
 - <doc:ServicesAndRelays>

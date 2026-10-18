@@ -15,8 +15,8 @@ import SwiftUI
  first GemeotryProxy.
 */
 extension GraniteComponent {
-    func geometryView(_ geo: AnyGeometry?) -> some View {
-        lifecycle(view)
+    func geometryView(_ geo: AnyGeometry?, locate: Command<Self.GenericGraniteCenter>?) -> some View {
+        lifecycle(view, locate: locate)
             .background(
                 GeometryReader { proxy in
                     Color

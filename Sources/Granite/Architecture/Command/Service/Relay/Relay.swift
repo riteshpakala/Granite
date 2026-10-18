@@ -21,7 +21,6 @@ public protocol AnyRelay {
 
 extension Relay: AnyRelay {
     public func detach() {
-        //Prospector.shared.node(for: self.id)?.remove()
     }
 }
 

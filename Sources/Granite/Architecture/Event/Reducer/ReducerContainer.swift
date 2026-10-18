@@ -37,7 +37,7 @@ protocol AnyReducerContainer: GraniteEventContainer {
 // `@unchecked Sendable`: the container coordinates a reducer across its own serial queue
 // and structured-concurrency `Task`s. Its mutable state is only touched from that serial
 // queue / the reducer's task, so the unchecked conformance asserts that manual discipline.
-final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Prospectable, Nameable, @unchecked Sendable {
+final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Nameable, @unchecked Sendable {
     public var id : UUID = .init()
     
     public var label: String {
@@ -67,6 +67,10 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Pros
     private var timer: DisplayLinkTimer? = nil
     private var isOnline: Bool
     private var executionTask: Task<Void, Error>? = nil
+
+    /// This container's scope, created under its director's scope in `setup`. The reducer's
+    /// signal subscriptions live here and end when the container does.
+    private var prospect: Prospect? = nil
 
     /// Gate for `GraniteReducerBehavior.persistentStreamingTask`: true while an
     /// execution owns the container. `NSLock` rather than the container's own
@@ -103,14 +107,23 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Pros
         }
     }
     
+    deinit {
+        prospect?.cancel()
+    }
+
     func setup(_ coordinator: Director) {
         self.coordinator = coordinator
-        
-        Prospector.shared.currentNode?.addChild(id: self.id, label: String(reflecting: Event.self), type: .event)
-        Prospector.shared.push(id: self.id)
-        bind()
-        observe()
-        Prospector.shared.pop()
+
+        prospect?.cancel()
+        let prospect = Prospect(id: id,
+                                label: String(reflecting: Event.self),
+                                type: .event,
+                                parent: coordinator.prospect)
+        self.prospect = prospect
+        prospect.withScope {
+            bind()
+            observe()
+        }
     }
     
     func bind() {
@@ -131,8 +144,7 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Pros
         
         switch reducer.interaction {
         case .debounce(let interval):
-            var signal = reducer.signal//TODO: revisit mutability + storage
-            signal.debounce(interval: interval, scheduler: queue) += { [weak self] value in
+            reducer.signal.debounced(interval, on: queue) += { [weak self] value in
                 if let thread = reducer.thread {
                     thread.async { [weak self] in
                         self?.commit(value)
@@ -142,8 +154,7 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Pros
                 }
             }
         case .throttle(let interval):
-            var signal = reducer.signal//TODO: revisit mutability + storage
-            signal.throttle(interval: interval, scheduler: queue) += { [weak self] value in
+            reducer.signal.throttled(interval, on: queue) += { [weak self] value in
                 if let thread = reducer.thread {
                     thread.async { [weak self] in
                         self?.commit(value)

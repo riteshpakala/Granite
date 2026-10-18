@@ -8,7 +8,6 @@
 
 import Foundation
 import SwiftUI
-import Combine
 import CoreData
 
 extension Storage {
@@ -300,11 +299,11 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     public var interaction: GraniteReducerInteraction
     
     //instanced signals (Receiver)
-    internal var beamCancellables: Set<AnyCancellable> = .init()
+    internal var beamCancellables: [GraniteCancellable] = []
     //shared signals (Receiver)
-    internal var broadcastCancellables: [String : AnyCancellable] = [:]
+    internal var broadcastCancellables: [String : GraniteCancellable] = [:]
     //component tree (Receiver)
-    internal var bubbledCancellables: [String : AnyCancellable] = [:]
+    internal var bubbledCancellables: [String : GraniteCancellable] = [:]
     
     required public init() {
         self.interaction = .basic
@@ -325,8 +324,8 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
         // Cancel only THIS instance's subscriptions. We deliberately do NOT call
         // `expedition.beam.removeObservers()` / `expedition.broadcast.removeObservers()`
         // here: `beam` and `broadcast` are type-shared signals (keyed by reducer type in
-        // `Storage`), so `removeObservers()` would wipe the shared Prospector node holding
-        // EVERY live instance's observers — tearing down sibling components' subscriptions.
+        // `Storage`), so `removeAllObservers()` would drop EVERY live instance's observers —
+        // tearing down sibling components' subscriptions.
         // Cancelling the per-instance cancellables removes exactly this instance's observer.
         beamCancellables.forEach { $0.cancel() }
         beamCancellables.removeAll()
@@ -418,10 +417,12 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     public func listen(_ kind: GraniteReducerListenKind, _ handler: @escaping (GranitePayload?) -> Void ) -> Self {
         switch kind {
         case .beam:
+            // `beam` is keyed by `String(describing: reducer)`, so it is effectively shared by
+            // type; clearing it keeps "last listener wins" across instances.
             beamCancellables.forEach { $0.cancel() }
             beamCancellables.removeAll()
-            expedition.beam.removeObservers()
-            beamCancellables.insert(expedition.beam += handler)
+            expedition.beam.removeAllObservers()
+            beamCancellables.append(expedition.beam += handler)
         case .broadcast(let id):
             broadcastCancellables[id]?.cancel()
             broadcastCancellables[id] = (expedition.broadcast += handler)

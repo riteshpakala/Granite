@@ -109,7 +109,9 @@ public final class GraniteNavigation: ObservableObject {
     
     var paths: [String: () -> AnyView] = [:]
     var stack: [String] = []
-    var prospectors: [String: UUID] = [:]
+    /// One scope per pushed destination, alive from push to pop. The destination's views read
+    /// it from the environment, so popping ends every command built under the pushed screen.
+    var prospectors: [String: Prospect] = [:]
     
     var level: Int {
         stack.count
@@ -139,12 +141,13 @@ public final class GraniteNavigation: ObservableObject {
         let screen = NavigationPassthroughComponent<Component, EmptyGranitePayload>.Screen<Component, EmptyGranitePayload>.init(component)
         let addr = NSString(format: "%p", addressHeap(o: screen)) as String
         
-        let id: UUID = .init()
-        prospectors[addr] = id
-        
-        paths[addr] = { AnyView(NavigationPassthroughComponent<Component,
-                                EmptyGranitePayload>(screen: screen)
-            .environment(\.graniteNavigationDestinationStyle, destinationStyle)) }
+        // Read lazily: the scope is created at push time, after this closure is stored.
+        paths[addr] = { [weak self] in
+            AnyView(NavigationPassthroughComponent<Component,
+                    EmptyGranitePayload>(screen: screen)
+                .environment(\.graniteNavigationDestinationStyle, destinationStyle)
+                .environment(\.graniteProspect, self?.prospectors[addr]))
+        }
         
         isActive[addr] = false
         return addr
@@ -154,17 +157,6 @@ public final class GraniteNavigation: ObservableObject {
               window: GraniteRouteWindowProperties? = nil) {
         
         GraniteLog("nav stack pushing into: \(self.id)")
-        
-        if let id = prospectors[addr] {
-            Prospector
-                .shared
-                .currentNode?
-                .addChild(id: id,
-                          label: self.id + " | " + "pushed view",
-                          type: .navigation)
-            Prospector.shared.push(id: id, .navigation)
-            GraniteLog("Pushed addr: \(addr) for id: \(id)", level: .debug)
-        }
         
         #if os(macOS)
         if let window {
@@ -183,15 +175,26 @@ public final class GraniteNavigation: ObservableObject {
                 paths[addr] = nil
             }
         } else {
+            beginScope(for: addr)
             isActive[addr] = true
             stack.append(addr)
             self.objectWillChange.send()
         }
         #else
+        beginScope(for: addr)
         isActive[addr] = true
         stack.append(addr)
         self.objectWillChange.send()
         #endif
+    }
+
+    /// Opens the scope a stack destination's commands attach to. Windows get none: they
+    /// are never popped, and their commands end with the window's views.
+    private func beginScope(for addr: String) {
+        prospectors[addr]?.cancel()
+        let scope = Prospect(label: self.id + " | pushed view", type: .navigation, parent: nil)
+        prospectors[addr] = scope
+        GraniteLog("Pushed addr: \(addr) for id: \(scope.id)", level: .debug)
     }
     
     func pop() {
@@ -203,11 +206,9 @@ public final class GraniteNavigation: ObservableObject {
         self.objectWillChange.send()
         #endif
         
-        if let id = prospectors[addr] {
-            Prospector.shared.remove(id: id)
-            GraniteLog("Popped addr: \(addr) for id: \(id) | node count: \(Prospector.shared.nodeCount)", level: .debug)
-            
-            
+        if let scope = prospectors.removeValue(forKey: addr) {
+            scope.cancel()
+            GraniteLog("Popped addr: \(addr) for id: \(scope.id) | node count: \(Prospector.nodeCount)", level: .debug)
         }
     }
     

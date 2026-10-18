@@ -21,9 +21,16 @@ queue on every access, which provided no ordering guarantee.)
 
 ## Thread-safe registries
 
-The process-wide registries that back signals, shared objects, and persistence queues are
-lock-guarded and `Sendable`, so they can be touched safely from reducer queues and the main
-thread alike.
+The process-wide registries that back shared objects, type-shared signals, and persistence
+queues are lock-guarded and `Sendable`, so they can be touched safely from reducer queues and the
+main thread alike.
+
+## Signals and scopes
+
+Each signal and each scope carries its own lock, held only to read or swap its own fields.
+Handlers run with no lock held, so a handler may send, observe or cancel freely. There is no
+global index of scopes: the current scope is a task-local binding, so concurrent view
+construction never contends on shared state. See <doc:SignalsAndScopes>.
 
 ## Cancellation
 

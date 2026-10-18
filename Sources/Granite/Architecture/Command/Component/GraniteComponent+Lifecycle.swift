@@ -34,7 +34,7 @@ enum GraniteLifecycle: String, Equatable, Codable {
 }
 
 extension GraniteComponent {
-    func lifecycle<Body : View>(_ view : Body) -> some View {
+    func lifecycle<Body : View>(_ view : Body, locate: Command<Self.GenericGraniteCenter>?) -> some View {
         let relays = self.findRelays()
             
         guard let locate else {

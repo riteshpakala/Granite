@@ -65,23 +65,15 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
 
         weak var pausable: PausableSinkSubscriber<Wrapped.ObjectWillChangePublisher.Output, Never>? = nil
 
+        // This container is rebuilt on every parent redraw, so it owns its one subscription
+        // directly and touches no shared structure: no scope, no registry.
         deinit {
             pausable?.cancel()
             pausable = nil
-            Prospector.shared.node(for: self.id)?.remove(includeChildren: true)
-            //GraniteLog("Shareable deinit", level: .debug)
         }
-
-        let id: UUID = .init()
 
 		init(wrappedValue: Wrapped, id: ID) where Wrapped: SharableObject {
             self.object = wrappedValue
-            
-            let currentNodeId = Prospector.shared.currentNode?.id
-            Prospector.shared.currentNode?.addChild(id: self.id,
-                                                    label: String(reflecting: Self.self),
-                                                    type: .relayNetwork)
-            Prospector.shared.push(id: self.id, .relayNetwork)
             
             // DispatchQueue.main (not RunLoop.main): RunLoop.main only fires in the
             // default run-loop mode, so shared-object → UI delivery stalls while a finger
@@ -94,17 +86,6 @@ public struct SharedObject<ObjectType, ID>: DynamicProperty where ObjectType: Ob
                 self?.objectWillChange.send()
             }
             pausable?.state = .normal
-            
-            if let currentNodeId,
-               let pausable  {
-                let nodeLabel = Prospector.shared.node(for: currentNodeId)?.label ?? ""
-                //GraniteLog("Shared sub'd under id: \(currentNodeId) | \(nodeLabel)", level: .debug)
-                Prospector.shared.currentNode?.addProspect(pausable, for: self.id)
-            } else if currentNodeId == nil {
-                //GraniteLog("No current node exists: \(String(reflecting: ObjectType.self))", level: .debug)
-            }
-            
-            Prospector.shared.pop(.relayNetwork)
 		}
 	}
 	

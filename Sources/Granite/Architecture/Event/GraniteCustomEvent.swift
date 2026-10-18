@@ -57,6 +57,11 @@ public struct GraniteEventHost: @unchecked Sendable {
     /// Whether the command is attached or appeared.
     public var isAvailable: Bool { director?.isAvailable ?? false }
 
+    /// The command's scope, nil once the command is gone. A wrapper that observes signals
+    /// itself can store its subscriptions here so they end with the command; `compile(with:)`
+    /// already runs with this scope bound, so `signal += { … }` there lands in it.
+    public var prospect: Prospect? { director?.prospect }
+
     /// The command's state as it stands now; nil once the command is gone.
     public func state() -> AnyGraniteState? { director?.getState() }
 
