@@ -15,7 +15,11 @@ let package = Package(
         .library(
             name: "GraniteUI",
             targets: ["GraniteUI"]),
-
+        // Agents on Granite: `@Agent`, `GraniteAgent` and the service scaffolding they run on, and the
+        // roster through which an agent shipped as its own package is found by the app that links it.
+        .library(
+            name: "GraniteAgents",
+            targets: ["GraniteAgents"]),
     ],
     dependencies: [
         // Swift-DocC plugin: enables `swift package generate-documentation --target Granite`.
@@ -37,6 +41,14 @@ let package = Package(
         .testTarget(
             name: "GraniteUITests",
             dependencies: ["GraniteUI"],
+            swiftSettings: [.swiftLanguageMode(.v6)]),
+        .target(
+            name: "GraniteAgents",
+            dependencies: ["Granite"],
+            swiftSettings: [.swiftLanguageMode(.v6)]),
+        .testTarget(
+            name: "GraniteAgentsTests",
+            dependencies: ["GraniteAgents", "Granite"],
             swiftSettings: [.swiftLanguageMode(.v6)]),
     ]
 )

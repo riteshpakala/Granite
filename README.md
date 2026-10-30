@@ -58,6 +58,7 @@ The architecture itself is still a WIP, but currently I have moved onto seeing i
 - [App Project Generator](#app-project-generator)
 - [XCTemplates](#XCTemplates)
 - [Documentation](#Documentation)
+- [Agents](#Agents) //GraniteAgents
 - [Guide](#Guide)
 	- [GraniteComponent](#GraniteComponent) //Views
 	- [GraniteReducer](#GraniteReducer) //Business logic
@@ -143,6 +144,32 @@ Scripts/build-docs.sh --static --base-path Granite   # static HTML for GitHub Pa
 ```
 
 Inside Xcode you can also use **Product ▸ Build Documentation** (⌃⌘D).
+
+# Agents
+
+`GraniteAgents`, a second product, adds the shape a reducer lacks: work that runs for seconds and says
+things as it goes. An agent is a `GraniteAgent`; its `run` computes in a task of its own and streams
+events, and its `reduce` folds each one into the center's state on main, keyed by run. A center
+declares it beside its events:
+
+```swift
+.product(name: "GraniteAgents", package: "Granite")
+
+struct NotesCenter: GraniteCenter {
+    struct State: GraniteState { var summaries: [String: String] = [:] }
+    @Event var open: Open.Reducer
+    @Agent(.parallel(max: 2)) var summarizer: Summarizer.Agent
+    @Store var state: State
+}
+
+center.summarizer.send(.init(note: id, text: text))                  // frames land on later turns
+try await center.$summarizer.perform(.init(note: id, text: text))     // returns with the state complete
+```
+
+It also carries what a service built around agents runs on: `Live.service`, `onMain`, `GraniteTickets`,
+`GraniteLane`, `RunRegistry`, `TransientRegistry` and `TransientState`. The articles are in
+[`Sources/GraniteAgents/GraniteAgents.docc`](Sources/GraniteAgents/GraniteAgents.docc)
+(`Scripts/build-docs.sh --target GraniteAgents`).
 
 
 # Guide
