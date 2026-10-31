@@ -35,6 +35,21 @@ public struct AnyAgentPackage: Sendable {
         call = { data, host in try await Self.perform(P.self, data, host: host) }
     }
 
+    /// A package described rather than linked: what an entry says of it (`AgentWire.Entry`), and a call that runs
+    /// wherever the package lives. `RemoteAgent` makes one whose call runs a process of its own.
+    public init(word: String, summary: String, module: String, type: String, schema: GraniteSchema, fields: [String: String],
+                lanes: Int?, guide: String, perform: @escaping @Sendable (Data, AgentHost) async throws -> Data) {
+        self.word = word
+        self.summary = summary
+        self.module = module
+        self.type = type
+        self.schema = schema
+        self.fields = fields
+        self.lanes = lanes
+        self.guide = guide
+        call = perform
+    }
+
     /// Whether the package takes the host's folder (`directoryField`).
     public var takesDirectory: Bool {
         guard case .object(let fields) = schema else { return false }

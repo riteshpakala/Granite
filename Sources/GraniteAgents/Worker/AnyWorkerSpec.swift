@@ -26,6 +26,21 @@ public struct AnyWorkerSpec: Sendable {
         open = { word, project in W.opening(word: word, project: project) }
     }
 
+    /// A worker spec described rather than linked (`AgentWire.Entry`): everything but its opening, which is the
+    /// host's own.
+    public init(word: String, summary: String, module: String, type: String, toolNames: [String], budget: WorkerBudget,
+                shell: Bool, reportRule: String?) {
+        self.word = word
+        self.summary = summary
+        self.module = module
+        self.type = type
+        self.toolNames = toolNames
+        self.budget = budget
+        self.shell = shell
+        self.reportRule = reportRule
+        open = { _, _ in nil }
+    }
+
     /// Who it is, opening its prompt; nil keeps the app's own opening.
     public func opening(word: String, project: String) -> String? {
         open(word, project)

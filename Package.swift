@@ -48,7 +48,13 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "GraniteAgentsTests",
-            dependencies: ["GraniteAgents", "Granite"],
+            dependencies: ["GraniteAgents", "Granite", "AgentRunnerFixture"],
+            swiftSettings: [.swiftLanguageMode(.v6)]),
+        // A runner as an installer writes one, for the tests that run an agent in a process of its own.
+        .executableTarget(
+            name: "AgentRunnerFixture",
+            dependencies: ["GraniteAgents"],
+            path: "Tests/Fixtures/AgentRunnerFixture",
             swiftSettings: [.swiftLanguageMode(.v6)]),
     ]
 )
