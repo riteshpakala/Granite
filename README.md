@@ -196,6 +196,20 @@ person's ask, a note it shows, and the model it has loaded (`perform(json, host:
 same way (`GraniteWorkerSpec`). The recipe is the
 *Agent packages* article; [MarbleAgent](https://github.com/riteshpakala/MarbleAgent) is a worked example.
 
+An app need not link a package to run it. `AgentInstaller` builds any package that carries a record into a
+*runner* on a shelf, and `AgentShelf` offers its agents as roster entries. Each call is a process of its own,
+over JSON lines on stdin and stdout, the app's folder, ask, notes and model offered across it, and the
+process exits when it has answered:
+
+```swift
+try await AgentInstaller(folder: agents).install(AgentSource("https://github.com/riteshpakala/PlateAgent.git"))
+let roster = GraniteRoster(GraniteRoster.discovered().entries + AgentShelf(folder: agents).entries())
+```
+
+What an agent declares, how a host finds and calls it, and the wire between them are a standard,
+[`Schema/GraniteAgent.md`](Schema/GraniteAgent.md) (`granite-agent/1`), with JSON Schema for an agent's entry,
+every message and an installation's record beside it.
+
 
 # Guide
 

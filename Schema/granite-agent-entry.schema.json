@@ -1,0 +1,155 @@
+{
+  "$defs" : {
+    "entry" : {
+      "properties" : {
+        "budget" : {
+          "enum" : [
+            "reading",
+            "shell"
+          ],
+          "type" : "string"
+        },
+        "fields" : {
+          "additionalProperties" : {
+            "type" : "string"
+          },
+          "description" : "a note beside each input field",
+          "type" : "object"
+        },
+        "guide" : {
+          "description" : "how to use it well, in its own words",
+          "type" : "string"
+        },
+        "kind" : {
+          "enum" : [
+            "package",
+            "worker"
+          ],
+          "type" : "string"
+        },
+        "lanes" : {
+          "description" : "how many calls run at once",
+          "minimum" : 1,
+          "type" : "integer"
+        },
+        "module" : {
+          "description" : "the module that declares it",
+          "type" : "string"
+        },
+        "reportRule" : {
+          "type" : "string"
+        },
+        "schema" : {
+          "$ref" : "#/$defs/schema"
+        },
+        "shell" : {
+          "type" : "boolean"
+        },
+        "summary" : {
+          "description" : "what it does, in one sentence",
+          "type" : "string"
+        },
+        "toolNames" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "type" : {
+          "description" : "its type, as Module.Type",
+          "type" : "string"
+        },
+        "word" : {
+          "description" : "how a host calls it and a model names it: lowercase, one word",
+          "pattern" : "^[a-z][a-z0-9-]*$",
+          "type" : "string"
+        }
+      },
+      "required" : [
+        "kind",
+        "word",
+        "summary",
+        "module",
+        "type"
+      ],
+      "type" : "object"
+    },
+    "field" : {
+      "properties" : {
+        "name" : {
+          "type" : "string"
+        },
+        "required" : {
+          "type" : "boolean"
+        },
+        "schema" : {
+          "$ref" : "#/$defs/schema"
+        }
+      },
+      "required" : [
+        "name",
+        "schema",
+        "required"
+      ],
+      "type" : "object"
+    },
+    "schema" : {
+      "description" : "an agent's input schema as data: a word for a scalar or `any`, else exactly one of choice, array, object",
+      "oneOf" : [
+        {
+          "enum" : [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "any"
+          ],
+          "type" : "string"
+        },
+        {
+          "properties" : {
+            "choice" : {
+              "items" : {
+                "type" : "string"
+              },
+              "type" : "array"
+            }
+          },
+          "required" : [
+            "choice"
+          ],
+          "type" : "object"
+        },
+        {
+          "properties" : {
+            "array" : {
+              "$ref" : "#/$defs/schema"
+            }
+          },
+          "required" : [
+            "array"
+          ],
+          "type" : "object"
+        },
+        {
+          "properties" : {
+            "object" : {
+              "items" : {
+                "$ref" : "#/$defs/field"
+              },
+              "type" : "array"
+            }
+          },
+          "required" : [
+            "object"
+          ],
+          "type" : "object"
+        }
+      ]
+    }
+  },
+  "$id" : "https://github.com/riteshpakala/Granite/blob/main/Schema/granite-agent-entry.schema.json",
+  "$ref" : "#/$defs/entry",
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "title" : "A Granite agent, described (granite-agent/1)"
+}

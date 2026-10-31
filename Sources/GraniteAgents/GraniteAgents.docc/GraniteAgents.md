@@ -27,7 +27,9 @@ try await center.$summarizer.perform(.init(note: id, text: text))   // returns o
 
 An agent can also ship as a Swift package of its own: a word, a `Codable` input and output, and a
 run. An app that links the package finds it through the ``GraniteRoster``, with no list to edit:
-<doc:AgentPackages>.
+<doc:AgentPackages>. An app that does not link it can install it from source and run it in a process of
+its own, one call each: <doc:RemoteAgents>. The standard both follow is `Schema/GraniteAgent.md`,
+`granite-agent/1`.
 
 `GraniteAgents` builds on `Granite` and imports nothing else: Foundation and Granite's own signals.
 
@@ -64,6 +66,10 @@ run. An app that links the package finds it through the ``GraniteRoster``, with 
 - ``AnyWorkerSpec``
 - ``AgentPackageError``
 - ``GraniteSchema``
+
+### Running a package out of process
+
+- <doc:RemoteAgents>
 
 ### What a host offers a package
 
