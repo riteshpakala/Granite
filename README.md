@@ -171,6 +171,28 @@ It also carries what a service built around agents runs on: `Live.service`, `onM
 [`Sources/GraniteAgents/GraniteAgents.docc`](Sources/GraniteAgents/GraniteAgents.docc)
 (`Scripts/build-docs.sh --target GraniteAgents`).
 
+## Agent packages
+
+An agent can ship as a Swift package of its own. The package depends on `GraniteAgents`, declares one
+`GraniteAgentPackage` (a word, a `Codable` input and output, the compute it makes on its first call, and
+a run), and places a record in its binary:
+
+```swift
+@used @section("__DATA_CONST,__granite")
+let marbleRecord: GraniteRoster.Record = { GraniteRoster.record(MarbleAgent.self) }
+```
+
+An app that links the package finds it, with nothing to list and nothing to import:
+
+```swift
+let roster = GraniteRoster.discovered()
+let answer = try await roster.package("marble")?.perform(Data(#"{"path": "photo.png"}"#.utf8))
+```
+
+Granite hosts the run on a center of its own; the input's schema is read off its decoding, for an app to
+show a model. A package can ship a worker kind the same way (`GraniteWorkerSpec`). The recipe is the
+*Agent packages* article; [MarbleAgent](https://github.com/riteshpakala/MarbleAgent) is a worked example.
+
 
 # Guide
 

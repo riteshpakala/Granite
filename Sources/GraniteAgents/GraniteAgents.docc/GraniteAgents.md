@@ -25,6 +25,10 @@ center.summarizer.send(.init(note: id, text: text))         // a run begins; fra
 try await center.$summarizer.perform(.init(note: id, text: text))   // returns once the state is complete
 ```
 
+An agent can also ship as a Swift package of its own: a word, a `Codable` input and output, and a
+run. An app that links the package finds it through the ``GraniteRoster``, with no list to edit:
+<doc:AgentPackages>.
+
 `GraniteAgents` builds on `Granite` and imports nothing else: Foundation and Granite's own signals.
 
 ## Topics
@@ -47,6 +51,25 @@ try await center.$summarizer.perform(.init(note: id, text: text))   // returns o
 - ``AgentRunError``
 - ``AgentRunScope``
 - ``ChildFrame``
+
+### Agent packages
+
+- <doc:AgentPackages>
+- ``GraniteAgentPackage``
+- ``GraniteWorkerSpec``
+- ``WorkerBudget``
+- ``GraniteRoster``
+- ``GraniteRosterEntry``
+- ``AnyAgentPackage``
+- ``AnyWorkerSpec``
+- ``AgentPackageError``
+- ``GraniteSchema``
+
+### Hosting a package agent
+
+- ``AgentPackageCenter``
+- ``AgentPackageRun``
+- ``AgentPackageCall``
 
 ### What a service runs on
 
