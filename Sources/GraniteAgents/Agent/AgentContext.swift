@@ -1,17 +1,26 @@
 import Foundation
 
 /// What a run computes with and how it reaches the world: its id, its compute, cancellation,
-/// and `spawn`, which runs a child agent inside this run and streams the child's frames into
-/// this run's own events.
+/// what its host offers, and `spawn`, which runs a child agent inside this run and streams the
+/// child's frames into this run's own events.
 public struct AgentContext<Compute: Sendable, Event: Sendable>: Sendable {
     public let run: AgentRunID
     public let compute: Compute
     public let isCancelled: @Sendable () -> Bool
     /// Delivers an event into this run's stream, as `run` itself would.
     public let deliver: @Sendable (Event) -> Void
+    /// What the app that started the run offers it: its folder, the person's ask, a note, its model.
+    /// `.none` for a run an app started with its input alone; a child inherits its parent's.
+    public let host: AgentHost
 
-    public init(run: AgentRunID, compute: Compute, isCancelled: @escaping @Sendable () -> Bool, deliver: @escaping @Sendable (Event) -> Void) {
-        self.run = run; self.compute = compute; self.isCancelled = isCancelled; self.deliver = deliver
+    public init(run: AgentRunID, compute: Compute, isCancelled: @escaping @Sendable () -> Bool, deliver: @escaping @Sendable (Event) -> Void,
+                host: AgentHost = .none) {
+        self.run = run; self.compute = compute; self.isCancelled = isCancelled; self.deliver = deliver; self.host = host
+    }
+
+    /// The same context, offered `host`: how a package call's host reaches the run the engine made.
+    func hosted(by host: AgentHost) -> AgentContext {
+        AgentContext(run: run, compute: compute, isCancelled: isCancelled, deliver: deliver, host: host)
     }
 
     /// Runs `child` and returns its frames — announced, each event, how it ended — mapped into this
@@ -24,12 +33,14 @@ public struct AgentContext<Compute: Sendable, Event: Sendable>: Sendable {
                                            map: @escaping @Sendable (ChildFrame<Child.Event>) -> Event?) -> AsyncStream<Event> {
         let childRun = AgentRunID(raw: id, key: Child.key(input), parent: run.raw)
         let parentCancelled = isCancelled
+        let host = host
         return AsyncStream { continuation in
             if let announced = map(.started(childRun, kind: kind, prompt: prompt)) { continuation.yield(announced) }
             let task = Task {
                 let context = AgentContext<Child.Compute, Child.Event>(
                     run: childRun, compute: compute, isCancelled: { Task.isCancelled || parentCancelled() },
-                    deliver: { event in if let mapped = map(.event(childRun, event)) { continuation.yield(mapped) } })
+                    deliver: { event in if let mapped = map(.event(childRun, event)) { continuation.yield(mapped) } },
+                    host: host)
                 var outcome: AgentLifecycle = .finished
                 do {
                     for try await event in child.run(input, context: context) {

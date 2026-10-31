@@ -19,7 +19,9 @@ public struct AnyAgentPackage: Sendable {
     public let fields: [String: String]
     /// How many calls run at once; nil: no bound.
     public let lanes: Int?
-    private let call: @Sendable (Data) async throws -> Data
+    /// How to use it well, in its own words: what a host puts in its prompt when the agent is asked for.
+    public let guide: String
+    private let call: @Sendable (Data, AgentHost) async throws -> Data
 
     public init<P: GraniteAgentPackage>(_ package: P.Type) {
         word = P.word
@@ -29,7 +31,8 @@ public struct AnyAgentPackage: Sendable {
         schema = GraniteSchema.of(P.Input.self)
         fields = P.fields
         lanes = P.lanes
-        call = { data in try await Self.perform(P.self, data) }
+        guide = P.guide
+        call = { data, host in try await Self.perform(P.self, data, host: host) }
     }
 
     /// Whether the package takes the host's folder (`directoryField`).
@@ -38,13 +41,13 @@ public struct AnyAgentPackage: Sendable {
         return fields.contains { $0.name == Self.directoryField }
     }
 
-    /// Runs one call: the input decoded, the run hosted on the package's own center, the output encoded.
-    /// Cancelling the awaiting task cancels the run.
-    public func perform(_ input: Data) async throws -> Data {
-        try await call(input)
+    /// Runs one call: the input decoded, the run hosted on the package's own center and offered `host`, the
+    /// output encoded. Cancelling the awaiting task cancels the run.
+    public func perform(_ input: Data, host: AgentHost = .none) async throws -> Data {
+        try await call(input, host)
     }
 
-    private static func perform<P: GraniteAgentPackage>(_ package: P.Type, _ data: Data) async throws -> Data {
+    private static func perform<P: GraniteAgentPackage>(_ package: P.Type, _ data: Data, host offered: AgentHost) async throws -> Data {
         let input: P.Input
         do {
             input = try JSONDecoder().decode(P.Input.self, from: data)
@@ -61,7 +64,7 @@ public struct AnyAgentPackage: Sendable {
             return events
         }
         do {
-            _ = try await host.executable.perform(AgentPackageCall(id: id, input: input))
+            _ = try await host.executable.perform(AgentPackageCall(id: id, input: input, host: offered))
         } catch {
             heard.cancel()
             throw error

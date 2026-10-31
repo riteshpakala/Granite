@@ -65,6 +65,12 @@ run. An app that links the package finds it through the ``GraniteRoster``, with 
 - ``AgentPackageError``
 - ``GraniteSchema``
 
+### What a host offers a package
+
+- ``AgentHost``
+- ``AgentHostModel``
+- ``AgentHostError``
+
 ### Hosting a package agent
 
 - ``AgentPackageCenter``

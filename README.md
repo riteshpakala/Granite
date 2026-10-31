@@ -190,7 +190,10 @@ let answer = try await roster.package("marble")?.perform(Data(#"{"path": "photo.
 ```
 
 Granite hosts the run on a center of its own; the input's schema is read off its decoding, for an app to
-show a model. A package can ship a worker kind the same way (`GraniteWorkerSpec`). The recipe is the
+show a model. An app may also offer the run what it has beside the JSON, an `AgentHost`: its folder, the
+person's ask, a note it shows, and the model it has loaded (`perform(json, host:)`); the run reads it as
+`context.host`, and a package says how to use it well in its `guide`. A package can ship a worker kind the
+same way (`GraniteWorkerSpec`). The recipe is the
 *Agent packages* article; [MarbleAgent](https://github.com/riteshpakala/MarbleAgent) is a worked example.
 
 

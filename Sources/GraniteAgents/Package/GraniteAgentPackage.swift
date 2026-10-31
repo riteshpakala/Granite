@@ -34,6 +34,8 @@ import Foundation
 ///
 /// PIN: an `Input` field named `directory` (a `String?`) is the host's: an app fills it with the folder it
 /// works in and does not show it to a model. An `Output` that wrote files says where in `path` or `paths`.
+/// PIN: what else the app offers — the person's ask, a note it shows, the model it has loaded — a run reads
+/// through `context.host`, `.none` when the call came with JSON alone.
 public protocol GraniteAgentPackage: Sendable {
     /// What a call carries, decoded from the caller's JSON. Its fields are the package's schema.
     associatedtype Input: Codable & Sendable
@@ -52,6 +54,9 @@ public protocol GraniteAgentPackage: Sendable {
     static var summary: String { get }
     /// A line per `Input` field, said beside the field in the schema. Default: none.
     static var fields: [String: String] { get }
+    /// How to use it well, in its own words: what to ask it for, what to give it, what it answers best. A host
+    /// puts it in its prompt when a person asks for the agent by name. Default: nothing.
+    static var guide: String { get }
     /// How many calls run at once; more wait their turn. Nil: no bound. Default: 2.
     static var lanes: Int? { get }
 
@@ -67,6 +72,7 @@ public protocol GraniteAgentPackage: Sendable {
 
 extension GraniteAgentPackage {
     public static var fields: [String: String] { [:] }
+    public static var guide: String { "" }
     public static var lanes: Int? { 2 }
 }
 

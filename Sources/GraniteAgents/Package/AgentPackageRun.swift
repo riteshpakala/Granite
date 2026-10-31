@@ -17,7 +17,7 @@ public struct AgentPackageRun<P: GraniteAgentPackage>: GraniteAgent {
     public init() {}
 
     public func run(_ input: Input, context: Context) -> AsyncThrowingStream<P.Event, Error> {
-        package.run(input.input, context: context)
+        package.run(input.input, context: context.hosted(by: input.host))
     }
 
     public func reduce(state: inout AgentPackageCenter<P>.State, event: P.Event, run: AgentRunID) {

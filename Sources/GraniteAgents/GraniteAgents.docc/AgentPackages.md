@@ -92,6 +92,62 @@ not, and an enum of `String` raw values that lists its cases is a choice of thos
 
 An output that wrote files says where in `path` or `paths`, so a host can tell what changed.
 
+### What the host offers
+
+A call is JSON, and a run gets more than its JSON: an app passes an ``AgentHost`` with the call, and the run
+reads it as `context.host`.
+
+- `directory`: the folder the app works in (the same folder an `Input`'s `directory` field is filled with).
+- `ask`: what the person asked, in their words. It is not a field of the input: a model writes the call, it
+  never writes the person's request, so the ask rides the host and never lands in a tool call's JSON.
+- `note(_:)`: a line of progress the app shows where it shows its agents' work.
+- `model`: the model the app has loaded, as an ``AgentHostModel``: a JSON object that fits a schema, or text.
+
+```swift
+public func run(_ input: Input, context: Context) -> AsyncThrowingStream<PlateFrame, Error> {
+    AsyncThrowingStream { continuation in
+        let task = Task {
+            do {
+                context.host.note("drafting the plate")
+                let model = try context.host.model(for: Self.word)      // AgentHostError.noModel when there is none
+                let spec = try await model.object(PlateSpec.self, system: rules, user: context.host.ask ?? input.brief ?? "",
+                                                  maxTokens: 3_500, seconds: 300)
+                …
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }
+        continuation.onTermination = { _ in task.cancel() }
+    }
+}
+```
+
+``AgentHost/none`` offers nothing, and is what a call made with JSON alone gets, so a package that can work
+without the model should; one that cannot fails its run with a sentence that names it. A child a run spawns
+inherits its host.
+
+An app offers its model by conforming a type to ``AgentHostModel`` over whatever it generates with:
+
+```swift
+let answer = try await roster.package("plate")?.perform(json, host: AgentHost(
+    directory: project.path, ask: request, model: AppModel(session), note: { line in agentMap.say(line) }))
+```
+
+### Say how to use it
+
+`summary` says what the agent does in a sentence. `guide` says how to use it well: what to ask it for, what to
+give it, what it answers best, what it is not for. An app puts it in its prompt when a person asks for the
+agent by name, so the model calling it reads the package's own advice:
+
+```swift
+public static let guide = """
+    Ask plate for one picture of one idea: a flow, the services, who calls whom. Name the folders it is drawn \
+    from in `sources`, and say in `brief` what the lanes are and what one path walks, end to end.
+    """
+```
+
+A package that says nothing has no guide (`""`).
+
 ### Test it
 
 The record works in the test binary too, so a test can find the package the way an app will:
@@ -121,8 +177,8 @@ for package in roster.packages {
 let answer = try await roster.package("marble")?.perform(json)   // the run, on its own center
 ```
 
-``AnyAgentPackage/perform(_:)`` decodes the input, hosts the run on the package's center, waits for it,
-and encodes what `output(from:)` read. Cancelling the task awaiting it cancels the run.
+``AnyAgentPackage/perform(_:host:)`` decodes the input, hosts the run on the package's center with what the
+app offers, waits for it, and encodes what `output(from:)` read. Cancelling the task awaiting it cancels the run.
 
 ### Ship a worker instead
 
@@ -148,5 +204,7 @@ The app makes it one of its worker kinds; what a worker is, past these words, is
   ``GraniteWorkerSpec``.
 - `Input` is `Codable`; optional fields are optional; enums list their cases.
 - Compute is made in `compute()`, on the first call; the run touches no state.
+- What the app offers is read through `context.host`; a run that needs the model asks `model(for:)`.
+- `guide` says how to use it well, when there is more to say than `summary`.
 - The record is two lines, and a test finds it with ``GraniteRoster/discovered()``.
 - The app links the package from a target, imports it nowhere, and runs it by its word.
