@@ -1,12 +1,12 @@
 //  WHAT: One message between a host and an agent running somewhere else: a line of JSON, one key naming the
 //        message. The conversation of `granite-agent/1`, which `Schema/GraniteAgent.md` sets out.
 //
-//            agent → host   {"hello": {"wire": "granite-agent/1", "pid": 4512}}
+//            agent → host   {"hello": {"wire": "granite-agent/1", "pid": 4512, "answer": "granite-answer/1"}}
 //            host → agent   {"perform": {"word": "plate", "input": {...}, "directory": "/p", "ask": "...", "model": true}}
 //            agent → host   {"note": "round 1: measured clean"}
 //            agent → host   {"model": {"id": 1, "object": {"schema": {...}, "system": "...", "user": "...", ...}}}
 //            host → agent   {"answer": {"id": 1, "object": {...}}}
-//            agent → host   {"output": {...}}   or   {"failed": "a sentence"}
+//            agent → host   {"output": {...}}   or   {"failed": "a sentence", "refused": {"kind": "call", "reasons": [...]}}
 //            host → agent   {"cancel": {}}
 //            agent → host   {"entries": [...]}   (only with --describe)
 //
@@ -30,15 +30,29 @@ public enum AgentWire: Sendable, Equatable {
     case model(ModelAsk)
     case answer(ModelAnswer)
     case output(AgentJSON)
-    case failed(String)
+    case failed(Failure)
     case cancel
     case entries([Entry])
 
-    /// The agent's first line: what it speaks, and which process it is.
+    /// The agent's first line: what it speaks, and which process it is. `answer`: the answer standard its calls
+    /// keep (`granite-answer/1`), so a host can tell a refusal from a fault; nil from a runner built before it.
     public struct Hello: Codable, Sendable, Equatable {
         public var wire: String
         public var pid: Int32?
-        public init(wire: String = AgentWire.version, pid: Int32? = nil) { self.wire = wire; self.pid = pid }
+        public var answer: String?
+        public init(wire: String = AgentWire.version, pid: Int32? = nil, answer: String? = nil) {
+            self.wire = wire; self.pid = pid; self.answer = answer
+        }
+    }
+
+    /// Why a call was not answered: the sentence, and when it was a refusal, its kind and reasons. On the wire the
+    /// sentence is `failed` and the refusal its sibling `refused`, so a reader that knows only the sentence reads it.
+    public struct Failure: Sendable, Equatable, ExpressibleByStringLiteral, ExpressibleByStringInterpolation {
+        public var message: String
+        public var refusal: AgentRefusal?
+        public init(_ message: String, refusal: AgentRefusal? = nil) { self.message = message; self.refusal = refusal }
+        public init(stringLiteral value: String) { self.init(value) }
+        public init(stringInterpolation: DefaultStringInterpolation) { self.init(String(stringInterpolation: stringInterpolation)) }
     }
 
     /// The one call a process answers.

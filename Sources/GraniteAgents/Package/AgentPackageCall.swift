@@ -6,6 +6,8 @@ public struct AgentPackageCall<Input: Sendable>: Sendable {
     public let id: String
     public let input: Input
     public let host: AgentHost
+    /// What its run threw, kept for the call: the engine says a failure as a sentence.
+    let thrown = AgentThrown()
 
     public init(id: String, input: Input, host: AgentHost = .none) {
         self.id = id; self.input = input; self.host = host

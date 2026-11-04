@@ -57,9 +57,10 @@ final class AgentServerTests: XCTestCase {
 
     func testAHostWithoutAModelIsSaidSo() async {
         let (exit, heard) = await call(.init(word: "hosted", input: .object(["needsModel": .bool(true)]), model: false))
-        XCTAssertEqual(exit, .failed)
-        guard case .failed(let sentence)? = heard.last else { return XCTFail("\(heard)") }
-        XCTAssertTrue(sentence.contains("hosted asks the host's model"), sentence)
+        XCTAssertEqual(exit, .refused, "a host with no model is a refusal of kind model, not a fault")
+        guard case .failed(let failure)? = heard.last else { return XCTFail("\(heard)") }
+        XCTAssertTrue(failure.message.contains("hosted asks the host's model"), failure.message)
+        XCTAssertEqual(failure.refusal?.kind, .model)
     }
 
     func testACallItCannotMakeIsRefused() async {

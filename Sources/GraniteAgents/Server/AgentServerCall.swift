@@ -19,7 +19,7 @@ final class AgentServerCall: @unchecked Sendable {
     }
 
     func serve() async -> AgentServer.Exit {
-        try? channel.send(.hello(.init(pid: getpid())))
+        try? channel.send(.hello(.init(pid: getpid(), answer: AgentAnswerStandard.format)))
         return await withCheckedContinuation { continuation in
             lock.withLock {
                 if let ended { continuation.resume(returning: ended) } else { done = continuation }
@@ -72,6 +72,8 @@ final class AgentServerCall: @unchecked Sendable {
                 self.finish(.answered, .output(json))
             } catch is CancellationError {
                 self.finish(.cancelled, .failed("cancelled"))
+            } catch AgentPackageError.refused(_, let refusal, let said) {
+                self.finish(Task.isCancelled ? .cancelled : .refused, .failed(.init(said, refusal: refusal)))
             } catch {
                 self.finish(Task.isCancelled ? .cancelled : .failed, .failed("\(error)"))
             }

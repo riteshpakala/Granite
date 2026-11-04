@@ -1,5 +1,139 @@
 {
   "$defs" : {
+    "answer" : {
+      "description" : "the reserved keys of a package call's answer; every other key is the package's own",
+      "properties" : {
+        "agent" : {
+          "properties" : {
+            "word" : {
+              "type" : "string"
+            }
+          },
+          "required" : [
+            "word"
+          ],
+          "type" : "object"
+        },
+        "expected" : {
+          "description" : "what the call asked for, as the package read it",
+          "items" : {
+            "properties" : {
+              "kind" : {
+                "type" : "string"
+              },
+              "name" : {
+                "type" : "string"
+              }
+            },
+            "required" : [
+              "kind",
+              "name"
+            ],
+            "type" : "object"
+          },
+          "type" : "array"
+        },
+        "format" : {
+          "const" : "granite-answer/1"
+        },
+        "made" : {
+          "items" : {
+            "properties" : {
+              "kind" : {
+                "type" : "string"
+              },
+              "name" : {
+                "type" : "string"
+              },
+              "path" : {
+                "type" : "string"
+              },
+              "state" : {
+                "enum" : [
+                  "written",
+                  "rewritten",
+                  "unchanged",
+                  "removed"
+                ],
+                "type" : "string"
+              }
+            },
+            "required" : [
+              "kind",
+              "name"
+            ],
+            "type" : "object"
+          },
+          "type" : "array"
+        },
+        "notes" : {
+          "description" : "what the model should know, one sentence each",
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "path" : {
+          "description" : "the first file it wrote",
+          "type" : [
+            "string",
+            "null"
+          ]
+        },
+        "paths" : {
+          "description" : "every file it wrote or removed, absolute or relative to the host's folder",
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "payloads" : {
+          "description" : "files among paths that follow a standard of their own",
+          "items" : {
+            "properties" : {
+              "path" : {
+                "type" : "string"
+              },
+              "schema" : {
+                "description" : "the id the file's own schema key says",
+                "type" : "string"
+              }
+            },
+            "required" : [
+              "path",
+              "schema"
+            ],
+            "type" : "object"
+          },
+          "type" : "array"
+        },
+        "problems" : {
+          "description" : "what the call could only do in part; not a refusal",
+          "items" : {
+            "properties" : {
+              "kind" : {
+                "type" : "string"
+              },
+              "text" : {
+                "type" : "string"
+              }
+            },
+            "required" : [
+              "kind",
+              "text"
+            ],
+            "type" : "object"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [
+        "format",
+        "agent",
+        "paths"
+      ],
+      "type" : "object"
+    },
     "entry" : {
       "properties" : {
         "budget" : {
@@ -31,6 +165,13 @@
           "description" : "how many calls run at once",
           "minimum" : 1,
           "type" : "integer"
+        },
+        "makes" : {
+          "description" : "what it makes, each kind with where it lands",
+          "items" : {
+            "$ref" : "#/$defs/make"
+          },
+          "type" : "array"
         },
         "module" : {
           "description" : "the module that declares it",
@@ -90,6 +231,66 @@
         "name",
         "schema",
         "required"
+      ],
+      "type" : "object"
+    },
+    "make" : {
+      "properties" : {
+        "into" : {
+          "description" : "where it writes, relative to the host's folder; * is one path component",
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "kind" : {
+          "description" : "the kind a call's made and expected items carry",
+          "pattern" : "^[a-z][a-z0-9-]*$",
+          "type" : "string"
+        },
+        "never" : {
+          "description" : "what it never does",
+          "type" : "string"
+        },
+        "what" : {
+          "description" : "what it is, in the words a reading can match to a request",
+          "type" : "string"
+        }
+      },
+      "required" : [
+        "kind",
+        "what",
+        "into"
+      ],
+      "type" : "object"
+    },
+    "refusal" : {
+      "properties" : {
+        "kind" : {
+          "enum" : [
+            "input",
+            "call",
+            "build",
+            "device",
+            "model",
+            "parse",
+            "reach",
+            "answer",
+            "host"
+          ],
+          "type" : "string"
+        },
+        "reasons" : {
+          "description" : "one sentence each, its fix in it",
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        }
+      },
+      "required" : [
+        "kind",
+        "reasons"
       ],
       "type" : "object"
     },

@@ -11,6 +11,7 @@ struct ParrotPackage: GraniteAgentPackage {
         var delay: Double?
         var crash: Bool?
         var fail: Bool?
+        var fault: Bool?
         var directory: String?
     }
 
@@ -24,7 +25,13 @@ struct ParrotPackage: GraniteAgentPackage {
     }
 
     struct Count: Decodable { let n: Int }
-    struct Failure: Error, CustomStringConvertible { var description: String { "told to fail" } }
+    /// A refusal of the call, as an agent's own error says one.
+    struct Failure: Error, CustomStringConvertible, AgentRefusing {
+        var description: String { "told to fail" }
+        var refusal: AgentRefusal { AgentRefusal(.call, "told to fail: leave out `fail`") }
+    }
+    /// The agent's own fault: no refusal.
+    struct Broke: Error, CustomStringConvertible { var description: String { "it broke" } }
 
     typealias Event = Said
     typealias Output = Said
@@ -43,6 +50,7 @@ struct ParrotPackage: GraniteAgentPackage {
                     for index in 0..<(input.notes ?? 0) { context.host.note("note \(index + 1)") }
                     if input.crash == true { abort() }
                     if input.fail == true { throw Failure() }
+                    if input.fault == true { throw Broke() }
                     if let delay = input.delay { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
                     var said = Said(said: input.text, directory: input.directory, hostDirectory: context.host.directory,
                                     ask: context.host.ask, pid: getpid())

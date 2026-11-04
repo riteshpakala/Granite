@@ -21,6 +21,8 @@ public struct AnyAgentPackage: Sendable {
     public let lanes: Int?
     /// How to use it well, in its own words: what a host puts in its prompt when the agent is asked for.
     public let guide: String
+    /// What it makes, and where (`GraniteAgentPackage.makes`).
+    public let makes: [AgentMake]
     private let call: @Sendable (Data, AgentHost) async throws -> Data
 
     public init<P: GraniteAgentPackage>(_ package: P.Type) {
@@ -32,13 +34,15 @@ public struct AnyAgentPackage: Sendable {
         fields = P.fields
         lanes = P.lanes
         guide = P.guide
+        makes = P.makes
         call = { data, host in try await Self.perform(P.self, data, host: host) }
     }
 
     /// A package described rather than linked: what an entry says of it (`AgentWire.Entry`), and a call that runs
     /// wherever the package lives. `RemoteAgent` makes one whose call runs a process of its own.
     public init(word: String, summary: String, module: String, type: String, schema: GraniteSchema, fields: [String: String],
-                lanes: Int?, guide: String, perform: @escaping @Sendable (Data, AgentHost) async throws -> Data) {
+                lanes: Int?, guide: String, makes: [AgentMake] = [],
+                perform: @escaping @Sendable (Data, AgentHost) async throws -> Data) {
         self.word = word
         self.summary = summary
         self.module = module
@@ -47,6 +51,7 @@ public struct AnyAgentPackage: Sendable {
         self.fields = fields
         self.lanes = lanes
         self.guide = guide
+        self.makes = makes
         call = perform
     }
 
@@ -78,15 +83,34 @@ public struct AnyAgentPackage: Sendable {
             for await event in tap { events.append(event) }
             return events
         }
+        let call = AgentPackageCall(id: id, input: input, host: offered)
         do {
-            _ = try await host.executable.perform(AgentPackageCall(id: id, input: input, host: offered))
+            _ = try await host.executable.perform(call)
         } catch {
             heard.cancel()
-            throw error
+            // What the run threw, not the engine's sentence about it: a refusal keeps its kind.
+            let original = call.thrown.take() ?? error
+            if original is CancellationError { throw original }
+            if let refusal = AgentRefusal.of(original) {
+                throw AgentPackageError.refused(word: P.word, refusal: refusal, said: "\(original)")
+            }
+            throw original
         }
         guard let output = P.output(from: await heard.value) else { throw AgentPackageError.noOutput(word: P.word) }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(output)
+        let data = try encoder.encode(output)
+        // PIN: opt-in, then the rule (`AgentAnswer`): an answer that conforms is held to the standard and stamped.
+        guard output is any AgentAnswer else { return data }
+        guard case .object(let object)? = AgentJSON(data: data) else {
+            let refusal = AgentRefusal(.answer, "\(P.word) answered something that is not an object")
+            throw AgentPackageError.refused(word: P.word, refusal: refusal, said: "\(refusal)")
+        }
+        let problems = AgentAnswerCheck.problems(in: object, word: P.word, makes: P.makes, directory: offered.directory)
+        guard problems.isEmpty else {
+            let refusal = AgentRefusal(.answer, problems)
+            throw AgentPackageError.refused(word: P.word, refusal: refusal, said: "\(P.word)'s answer breaks \(AgentAnswerStandard.format): \(refusal)")
+        }
+        return AgentJSON.object(AgentAnswerCheck.stamped(object, word: P.word)).data()
     }
 }

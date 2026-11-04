@@ -33,7 +33,8 @@ import Foundation
 /// ```
 ///
 /// PIN: an `Input` field named `directory` (a `String?`) is the host's: an app fills it with the folder it
-/// works in and does not show it to a model. An `Output` that wrote files says where in `path` or `paths`.
+/// works in and does not show it to a model. An `Output` that wrote files says where in `path` or `paths`; one
+/// that conforms to `AgentAnswer` answers `granite-answer/1`, checked and stamped before it leaves the process.
 /// PIN: what else the app offers — the person's ask, a note it shows, the model it has loaded — a run reads
 /// through `context.host`, `.none` when the call came with JSON alone.
 public protocol GraniteAgentPackage: Sendable {
@@ -59,6 +60,9 @@ public protocol GraniteAgentPackage: Sendable {
     static var guide: String { get }
     /// How many calls run at once; more wait their turn. Nil: no bound. Default: 2.
     static var lanes: Int? { get }
+    /// What it makes, each kind with where it lands: what a host routes to it, and the kinds its answer's `made` and
+    /// `expected` may name. Default: nothing declared.
+    static var makes: [AgentMake] { get }
 
     /// Makes what every run computes with. Called once, on the first call.
     static func compute() async throws -> Compute
@@ -74,6 +78,7 @@ extension GraniteAgentPackage {
     public static var fields: [String: String] { [:] }
     public static var guide: String { "" }
     public static var lanes: Int? { 2 }
+    public static var makes: [AgentMake] { [] }
 }
 
 extension GraniteAgentPackage where Compute == Void {

@@ -41,8 +41,9 @@ public struct AgentProcess: Sendable {
         let directory = host.directory.map { URL(fileURLWithPath: $0, isDirectory: true) }
         let child = try AgentChild(executable: executable, arguments: [], directory: directory, environment: environment)
         let call = AgentWire.Perform(word: word, input: json, directory: host.directory, ask: host.ask, model: host.model != nil)
+        let asks = AskCount()
         let result = await withTaskCancellationHandler {
-            await Self.serve(child, word: word, call: call, host: host)
+            await Self.serve(child, word: word, call: call, host: host, asks: asks)
         } onCancel: {
             try? child.channel.send(.cancel)
             child.terminate()
@@ -53,7 +54,7 @@ public struct AgentProcess: Sendable {
         DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: stragglers)
         let ended = await child.exited()
         stragglers.cancel()
-        cost?(child.cost(ended))
+        cost?(child.cost(ended, asks: asks.value))
         switch result {
         case .success(let data):
             return data
@@ -66,8 +67,10 @@ public struct AgentProcess: Sendable {
         }
     }
 
-    private static func serve(_ child: AgentChild, word: String, call: AgentWire.Perform, host: AgentHost) async -> Result<Data, Error> {
+    private static func serve(_ child: AgentChild, word: String, call: AgentWire.Perform, host: AgentHost,
+                              asks counted: AskCount) async -> Result<Data, Error> {
         var sent = false
+        var standard = false
         var asks: [Task<Void, Never>] = []
         defer { asks.forEach { $0.cancel() } }
         for await message in child.channel.messages {
@@ -78,25 +81,40 @@ public struct AgentProcess: Sendable {
                 }
                 guard !sent else { continue }
                 sent = true
+                standard = hello.answer != nil
                 do { try child.channel.send(.perform(call)) } catch {
                     return .failure(AgentRemoteError.unreadable(word: word, reason: "the call could not be sent: \(error)"))
                 }
             case .note(let line):
                 host.note(line)
             case .model(let ask):
+                counted.add()
                 asks.append(Task {
                     let answer = await Self.answer(ask, host: host)
                     try? child.channel.send(.answer(answer))
                 })
             case .output(let json):
                 return .success(json.data())
-            case .failed(let message):
-                return .failure(AgentRemoteError.failed(word: word, message: message))
+            case .failed(let failure):
+                // A runner that keeps the answer standard says a refusal as one; anything else it says is a fault.
+                if let refusal = failure.refusal {
+                    return .failure(AgentRemoteError.refused(word: word, refusal: refusal, message: failure.message))
+                }
+                return .failure(standard ? AgentRemoteError.fault(word: word, message: failure.message)
+                                         : AgentRemoteError.failed(word: word, message: failure.message))
             default:
                 return .failure(AgentRemoteError.unreadable(word: word, reason: "it said `\(message.kind)` during a call"))
             }
         }
         return .failure(AgentRemoteError.ended(word: word, status: "", log: ""))
+    }
+
+    /// The asks one call made of the host's model, counted as they came.
+    final class AskCount: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func add() { lock.withLock { count += 1 } }
+        var value: Int { lock.withLock { count } }
     }
 
     /// The host's model's answer to one ask, or a sentence saying why there is none.

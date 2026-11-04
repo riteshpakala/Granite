@@ -16,6 +16,7 @@ extension AgentWire {
         public var fields: [String: String]?
         public var lanes: Int?
         public var guide: String?
+        public var makes: [AgentMake]?
         // A worker spec's.
         public var toolNames: [String]?
         public var budget: WorkerBudget?
@@ -23,10 +24,10 @@ extension AgentWire {
         public var reportRule: String?
 
         public init(kind: Kind, word: String, summary: String, module: String, type: String, schema: GraniteSchema? = nil,
-                    fields: [String: String]? = nil, lanes: Int? = nil, guide: String? = nil, toolNames: [String]? = nil,
-                    budget: WorkerBudget? = nil, shell: Bool? = nil, reportRule: String? = nil) {
+                    fields: [String: String]? = nil, lanes: Int? = nil, guide: String? = nil, makes: [AgentMake]? = nil,
+                    toolNames: [String]? = nil, budget: WorkerBudget? = nil, shell: Bool? = nil, reportRule: String? = nil) {
             self.kind = kind; self.word = word; self.summary = summary; self.module = module; self.type = type
-            self.schema = schema; self.fields = fields; self.lanes = lanes; self.guide = guide
+            self.schema = schema; self.fields = fields; self.lanes = lanes; self.guide = guide; self.makes = makes
             self.toolNames = toolNames; self.budget = budget; self.shell = shell; self.reportRule = reportRule
         }
 
@@ -35,7 +36,8 @@ extension AgentWire {
             switch entry {
             case .package(let package):
                 self.init(kind: .package, word: package.word, summary: package.summary, module: package.module, type: package.type,
-                          schema: package.schema, fields: package.fields, lanes: package.lanes, guide: package.guide.isEmpty ? nil : package.guide)
+                          schema: package.schema, fields: package.fields, lanes: package.lanes, guide: package.guide.isEmpty ? nil : package.guide,
+                          makes: package.makes.isEmpty ? nil : package.makes)
             case .worker(let worker):
                 self.init(kind: .worker, word: worker.word, summary: worker.summary, module: worker.module, type: worker.type,
                           toolNames: worker.toolNames, budget: worker.budget, shell: worker.shell, reportRule: worker.reportRule)
@@ -47,7 +49,7 @@ extension AgentWire {
             switch kind {
             case .package:
                 return .package(AnyAgentPackage(word: word, summary: summary, module: module, type: type, schema: schema ?? .object([]),
-                                                fields: fields ?? [:], lanes: lanes, guide: guide ?? "", perform: perform))
+                                                fields: fields ?? [:], lanes: lanes, guide: guide ?? "", makes: makes ?? [], perform: perform))
             case .worker:
                 return .worker(AnyWorkerSpec(word: word, summary: summary, module: module, type: type, toolNames: toolNames ?? [],
                                              budget: budget ?? .reading, shell: shell ?? false, reportRule: reportRule))
@@ -55,7 +57,7 @@ extension AgentWire {
         }
 
         /// Every field an entry may say, in the order the standard lists them.
-        public static let fieldNames = ["kind", "word", "summary", "module", "type", "schema", "fields", "lanes", "guide",
+        public static let fieldNames = ["kind", "word", "summary", "module", "type", "schema", "fields", "lanes", "guide", "makes",
                                         "toolNames", "budget", "shell", "reportRule"]
     }
 }

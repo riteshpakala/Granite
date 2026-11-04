@@ -16,8 +16,23 @@ public struct AgentPackageRun<P: GraniteAgentPackage>: GraniteAgent {
 
     public init() {}
 
+    /// The package's run, its events passed on and what it throws kept beside the call (`AgentThrown`), so a
+    /// refusal keeps its kind past the engine.
     public func run(_ input: Input, context: Context) -> AsyncThrowingStream<P.Event, Error> {
-        package.run(input.input, context: context.hosted(by: input.host))
+        let inner = package.run(input.input, context: context.hosted(by: input.host))
+        let thrown = input.thrown
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await event in inner { continuation.yield(event) }
+                    continuation.finish()
+                } catch {
+                    thrown.keep(error)
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     public func reduce(state: inout AgentPackageCenter<P>.State, event: P.Event, run: AgentRunID) {

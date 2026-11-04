@@ -115,12 +115,12 @@ final class AgentChild: @unchecked Sendable {
     }
 
     /// What the call took, from the reaped usage.
-    func cost(_ ended: (status: Int32, usage: rusage)) -> AgentProcessCost {
+    func cost(_ ended: (status: Int32, usage: rusage), asks: Int = 0) -> AgentProcessCost {
         let usage = ended.usage
         let cpu = Double(usage.ru_utime.tv_sec) + Double(usage.ru_utime.tv_usec) / 1e6
             + Double(usage.ru_stime.tv_sec) + Double(usage.ru_stime.tv_usec) / 1e6
         return AgentProcessCost(seconds: Date().timeIntervalSince(started), cpuSeconds: cpu, peakBytes: Int64(usage.ru_maxrss),
-                                status: Self.describe(ended.status))
+                                status: Self.describe(ended.status), asks: asks)
     }
 
     static func describe(_ raw: Int32) -> String {

@@ -65,6 +65,19 @@ its own, one call each: <doc:RemoteAgents>. The standard both follow is `Schema/
 - ``AnyAgentPackage``
 - ``AnyWorkerSpec``
 - ``AgentPackageError``
+- ``AgentMake``
+
+### What a call answers
+
+- ``AgentAnswer``
+- ``AgentAnswerStandard``
+- ``AgentMade``
+- ``AgentExpected``
+- ``AgentProblem``
+- ``AgentPayload``
+- ``AgentAnswerCheck``
+- ``AgentRefusal``
+- ``AgentRefusing``
 - ``GraniteSchema``
 
 ### Running a package out of process

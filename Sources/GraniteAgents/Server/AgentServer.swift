@@ -25,6 +25,8 @@ public enum AgentServer {
         case failed = 1
         /// The host said something that is not a call, or left before making one.
         case unreadable = 2
+        /// The call was refused, with its kind and reasons.
+        case refused = 3
         /// The host cancelled the call, or asked the process to end (SIGTERM).
         case cancelled = 130
     }

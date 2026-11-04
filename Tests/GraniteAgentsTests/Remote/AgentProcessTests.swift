@@ -35,7 +35,7 @@ final class AgentProcessTests: XCTestCase {
         let entries = try await AgentProcess(executable: Self.runner).describe()
         XCTAssertEqual(entries.map(\.word), ["parrot"])
         XCTAssertEqual(entries.first?.module, "AgentRunnerFixture")
-        XCTAssertEqual(entries.first?.schema?.fields.map(\.name), ["text", "notes", "askModel", "delay", "crash", "fail", "directory"],
+        XCTAssertEqual(entries.first?.schema?.fields.map(\.name), ["text", "notes", "askModel", "delay", "crash", "fail", "fault", "directory"],
                        "the schema crossed in its own order")
         XCTAssertEqual(entries.first?.guide, "Give it text; it says it back.")
     }
@@ -59,15 +59,29 @@ final class AgentProcessTests: XCTestCase {
         XCTAssertEqual(cost.status, "exit 0")
         XCTAssertGreaterThan(cost.peakBytes, 1_000_000)
         XCTAssertTrue(cost.sentence.hasPrefix("released · peak "), cost.sentence)
+        XCTAssertEqual(cost.asks, 1, "the host counts the asks it answered")
     }
 
-    func testAFailureIsTheAgentsSentence() async throws {
+    /// A refusal crosses the wire with its kind and reasons, in the agent's own sentence.
+    func testARefusalIsTheAgentsSentenceWithItsKind() async throws {
         do {
             _ = try await AgentProcess(executable: Self.runner).perform(word: "parrot", input: Data(#"{"text": "x", "fail": true}"#.utf8), host: .none)
             XCTFail("it was told to fail")
-        } catch AgentRemoteError.failed(let word, let message) {
+        } catch AgentRemoteError.refused(let word, let refusal, let message) {
             XCTAssertEqual(word, "parrot")
-            XCTAssertTrue(message.contains("told to fail"), message)
+            XCTAssertEqual(message, "told to fail")
+            XCTAssertEqual(refusal, AgentRefusal(.call, "told to fail: leave out `fail`"))
+        }
+    }
+
+    /// From a runner that keeps the answer standard, an error that is no refusal is the agent's fault.
+    func testAFaultIsNotARefusal() async throws {
+        do {
+            _ = try await AgentProcess(executable: Self.runner).perform(word: "parrot", input: Data(#"{"text": "x", "fault": true}"#.utf8), host: .none)
+            XCTFail("it was told to break")
+        } catch AgentRemoteError.fault(let word, let message) {
+            XCTAssertEqual(word, "parrot")
+            XCTAssertEqual(message, "it broke")
         }
     }
 
