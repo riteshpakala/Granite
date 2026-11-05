@@ -67,6 +67,12 @@ struct Increment: GraniteReducer {
 - ``Event``
 - ``Notify``
 
+### Bubbling Actions
+
+- <doc:Bubbling>
+- ``GraniteBubble``
+- ``On``
+
 ### Signals & Scopes
 
 - <doc:SignalsAndScopes>

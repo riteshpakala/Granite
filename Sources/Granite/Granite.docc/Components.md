@@ -37,6 +37,11 @@ struct Profile: GraniteComponent {
 - **``GraniteState``** is a `Codable`, `Equatable` value type. Because state is a value, reducers
   can mutate a copy freely; only the final value is published.
 
+## Talking to a parent
+
+A component, or any view inside it, sends actions up to whoever placed it with `bubble`, and
+the parent routes them with `onBubble`. See <doc:Bubbling>.
+
 ## Lifecycle events
 
 Declare lifecycle-scoped reducers with `@Event(.onAppear)`, `@Event(.onDisappear)`, or
