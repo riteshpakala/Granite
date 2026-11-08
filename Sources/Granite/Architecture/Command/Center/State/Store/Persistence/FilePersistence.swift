@@ -54,12 +54,17 @@ final public class FilePersistence: AnyPersistence, @unchecked Sendable {
     }()
     private static let decoder = PropertyListDecoder()
 
-    /// new folder name
+    /// The folder every store saves under.
     private static let folderName = "granite-db"
-    /// Legacy (misspelled) folder name, migrated on first use if present.
-    private static let legacyFolderName = "granite-file-persistance"
+    /// Folders earlier releases saved under, **newest first**. Their files are adopted
+    /// into ``folderName`` at launch (see ``adoptLegacyFiles(into:from:fileManager:)``).
+    ///  - `GranitePersistence`: 1269b5a (2026-07) up to 7a2be5f (2026-08), which renamed
+    ///    the folder without migrating it, so apps upgrading across that commit launched
+    ///    with every store empty.
+    ///  - `granite-file-persistance`: the original, misspelled name.
+    static let legacyFolderNames = ["GranitePersistence", "granite-file-persistance"]
 
-    /// Guards the one-time root-folder migration across concurrent store inits.
+    /// Guards the once-per-process legacy migration across concurrent store inits.
     private static let migrationLock = NSLock()
     nonisolated(unsafe) private static var migratedRoots: Set<String> = []
 
@@ -161,9 +166,20 @@ final public class FilePersistence: AnyPersistence, @unchecked Sendable {
         #endif
     }
 
-    /// One-time migration of the old, misspelled (`granite-file-persistance`) folder —
-    /// and, on macOS, the old Caches location — into the new canonical root, so existing
-    /// installs keep their saved state after upgrading.
+    /// Every legacy folder that may hold this install's saved state, newest first: each
+    /// retired name beside the current root, then (macOS) the old Caches location.
+    private static func legacyRoots(base: URL) -> [URL] {
+        var roots = legacyFolderNames.map { base.appendingPathComponent($0, isDirectory: true) }
+        #if os(macOS)
+        if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            roots += legacyFolderNames.map { caches.appendingPathComponent($0, isDirectory: true) }
+        }
+        #endif
+        return roots
+    }
+
+    /// Adopts any legacy folders into `newRoot`, once per process, before the first store
+    /// in that root reads anything.
     private static func migrateLegacyRootIfNeeded(to newRoot: URL, base: URL) {
         migrationLock.lock()
         defer { migrationLock.unlock() }
@@ -172,27 +188,102 @@ final public class FilePersistence: AnyPersistence, @unchecked Sendable {
         guard migratedRoots.contains(token) == false else { return }
         migratedRoots.insert(token)
 
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: newRoot.path) == false else { return }
-
-        // Candidate legacy locations, in priority order.
-        var candidates: [URL] = [base.appendingPathComponent(legacyFolderName, isDirectory: true)]
-        #if os(macOS)
-        if let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first {
-            candidates.append(caches.appendingPathComponent(legacyFolderName, isDirectory: true))
+        let adopted = adoptLegacyFiles(into: newRoot, from: legacyRoots(base: base))
+        if !adopted.isEmpty {
+            GraniteLog("adopted legacy persistence into \(newRoot.path): \(adopted.joined(separator: ", "))",
+                       level: .info)
         }
-        #endif
+    }
 
-        for legacy in candidates where fm.fileExists(atPath: legacy.path) {
-            do {
-                try fm.createDirectory(at: newRoot.deletingLastPathComponent(),
-                                       withIntermediateDirectories: true)
-                try fm.moveItem(at: legacy, to: newRoot)
-                GraniteLog("migrated persistence \(legacy.path) → \(newRoot.path)", level: .info)
-                return
-            } catch {
-                GraniteLog("persistence migration failed: \(error.localizedDescription)", level: .error)
+    /// Moves every file in `legacyRoots` into `newRoot`, **one file at a time**.
+    ///
+    /// Per file, not per folder: the old folder move skipped migration whenever `newRoot`
+    /// already existed, and a build that shipped the rename without a migration had
+    /// already created it — with every store reset to defaults.
+    ///
+    /// **A legacy file wins over one already in `newRoot`.** A legacy folder only holds
+    /// data when this install last saved there: before the rename, or after a downgrade
+    /// to a build that still uses it. Either way it is the newest copy, and a `newRoot`
+    /// file for the same key came from a launch that could not see it. The file it
+    /// replaces is kept as `<name>.superseded-<unix time>`, never deleted.
+    ///
+    /// Runs every launch rather than once, so a downgrade-then-upgrade is handled too;
+    /// with no legacy folders left it costs one existence check per folder. Adopted
+    /// folders are removed once empty. When two legacy folders hold the same name, the
+    /// newer folder's copy is adopted and the older one is set aside, so it can never be
+    /// adopted over current data on a later launch.
+    ///
+    /// - Returns: The names adopted into `newRoot`, in the order they were moved.
+    @discardableResult
+    static func adoptLegacyFiles(into newRoot: URL,
+                                 from legacyRoots: [URL],
+                                 fileManager fm: FileManager = .default) -> [String] {
+        let present = legacyRoots.filter { fm.fileExists(atPath: $0.path) }
+        guard !present.isEmpty else { return [] }
+
+        do {
+            try fm.createDirectory(at: newRoot, withIntermediateDirectories: true)
+        } catch {
+            GraniteLog("persistence migration failed: \(error.localizedDescription)", level: .error)
+            return []
+        }
+
+        let stamp = Int(Date().timeIntervalSince1970)
+        var claimed: Set<String> = []
+        var adopted: [String] = []
+
+        for legacyRoot in present {
+            let names = (try? fm.contentsOfDirectory(atPath: legacyRoot.path)) ?? []
+            for name in names.sorted() {
+                let source = legacyRoot.appendingPathComponent(name)
+                let destination = newRoot.appendingPathComponent(name)
+
+                // A newer legacy folder already supplied this name.
+                guard claimed.insert(name).inserted else {
+                    _ = setAside(source, as: name, in: newRoot, stamp: stamp, fm)
+                    continue
+                }
+
+                var displaced: URL? = nil
+                if fm.fileExists(atPath: destination.path) {
+                    guard let aside = setAside(destination, as: name, in: newRoot, stamp: stamp, fm)
+                    else { continue }   // can't keep the current file safe: leave both alone
+                    displaced = aside
+                }
+
+                do {
+                    try fm.moveItem(at: source, to: destination)
+                    adopted.append(name)
+                } catch {
+                    GraniteLog("persistence migration of \(name) failed: \(error.localizedDescription)",
+                               level: .error)
+                    if let displaced { try? fm.moveItem(at: displaced, to: destination) }
+                }
             }
+
+            if (try? fm.contentsOfDirectory(atPath: legacyRoot.path))?.isEmpty == true {
+                try? fm.removeItem(at: legacyRoot)
+            }
+        }
+        return adopted
+    }
+
+    /// Moves `url` to `<name>.superseded-<stamp>` in `root`, never overwriting anything.
+    private static func setAside(_ url: URL, as name: String, in root: URL,
+                                 stamp: Int, _ fm: FileManager) -> URL? {
+        var aside = root.appendingPathComponent("\(name).superseded-\(stamp)")
+        var suffix = 1
+        while fm.fileExists(atPath: aside.path) {
+            aside = root.appendingPathComponent("\(name).superseded-\(stamp)-\(suffix)")
+            suffix += 1
+        }
+        do {
+            try fm.moveItem(at: url, to: aside)
+            return aside
+        } catch {
+            GraniteLog("persistence migration could not set aside \(name): \(error.localizedDescription)",
+                       level: .error)
+            return nil
         }
     }
 

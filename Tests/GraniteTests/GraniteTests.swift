@@ -110,6 +110,117 @@ final class GraniteTests: XCTestCase {
         XCTAssertEqual(restored, Sample(count: 2, name: "second"))
     }
 
+    // MARK: - Legacy folder adoption
+
+    private struct MigrationSandbox {
+        let base: URL
+        var root: URL { base.appendingPathComponent("granite-db") }
+        var renamed: URL { base.appendingPathComponent("GranitePersistence") }
+        var misspelled: URL { base.appendingPathComponent("granite-file-persistance") }
+        var legacy: [URL] { [renamed, misspelled] }
+
+        init() throws {
+            base = FileManager.default.temporaryDirectory
+                .appendingPathComponent("granite.migration.\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        }
+
+        func write(_ text: String, _ name: String, in folder: URL) throws {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try Data(text.utf8).write(to: folder.appendingPathComponent(name))
+        }
+
+        func read(_ name: String, in folder: URL) -> String? {
+            (try? Data(contentsOf: folder.appendingPathComponent(name))).map { String(decoding: $0, as: UTF8.self) }
+        }
+
+        func names(in folder: URL) -> [String] {
+            ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).sorted()
+        }
+
+        func remove() { try? FileManager.default.removeItem(at: base) }
+    }
+
+    func testLegacyFolderIsAdoptedIntoAnEmptyRoot() throws {
+        let box = try MigrationSandbox()
+        defer { box.remove() }
+        try box.write("story", "app.story", in: box.renamed)
+
+        let adopted = FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy)
+
+        XCTAssertEqual(adopted, ["app.story"])
+        XCTAssertEqual(box.read("app.story", in: box.root), "story")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: box.renamed.path), "emptied legacy folder is removed")
+    }
+
+    /// The shipped bug: a build renamed the folder without migrating, launched against an
+    /// empty root and saved defaults there. The legacy file is the reader's real data.
+    func testLegacyFileWinsOverDefaultsARenameWithoutMigrationWrote() throws {
+        let box = try MigrationSandbox()
+        defer { box.remove() }
+        try box.write("real collection", "app.dreams", in: box.renamed)
+        try box.write("fresh defaults", "app.dreams", in: box.root)
+
+        FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy)
+
+        XCTAssertEqual(box.read("app.dreams", in: box.root), "real collection")
+        let aside = box.names(in: box.root).filter { $0.hasPrefix("app.dreams.superseded-") }
+        XCTAssertEqual(aside.count, 1, "the replaced file is kept, never deleted")
+        XCTAssertEqual(aside.first.flatMap { box.read($0, in: box.root) }, "fresh defaults")
+    }
+
+    func testFilesOnlyInTheRootAreLeftAlone() throws {
+        let box = try MigrationSandbox()
+        defer { box.remove() }
+        try box.write("newer store", "app.journal", in: box.root)
+        try box.write("story", "app.story", in: box.renamed)
+
+        FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy)
+
+        XCTAssertEqual(box.read("app.journal", in: box.root), "newer store")
+        XCTAssertEqual(box.read("app.story", in: box.root), "story")
+    }
+
+    /// When both retired folders hold a key, the newer folder's copy is current. The older
+    /// copy is set aside so no later launch can adopt it over that data.
+    func testNewerLegacyFolderWinsAndTheOlderCopyCanNeverReturn() throws {
+        let box = try MigrationSandbox()
+        defer { box.remove() }
+        try box.write("current", "app.story", in: box.renamed)
+        try box.write("ancient", "app.story", in: box.misspelled)
+
+        FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy)
+        XCTAssertEqual(box.read("app.story", in: box.root), "current")
+
+        let second = FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy)
+        XCTAssertEqual(second, [])
+        XCTAssertEqual(box.read("app.story", in: box.root), "current")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: box.misspelled.path))
+    }
+
+    /// A downgrade to a build that still saves in the legacy folder, then an upgrade: the
+    /// legacy folder is the newest copy again and must be adopted again.
+    func testADowngradeThenUpgradeAdoptsTheLegacyFolderAgain() throws {
+        let box = try MigrationSandbox()
+        defer { box.remove() }
+        try box.write("v1", "app.story", in: box.renamed)
+        FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy)
+
+        try box.write("written after downgrade", "app.story", in: box.renamed)
+        FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy)
+
+        XCTAssertEqual(box.read("app.story", in: box.root), "written after downgrade")
+    }
+
+    func testNoLegacyFoldersIsANoOp() throws {
+        let box = try MigrationSandbox()
+        defer { box.remove() }
+        try box.write("state", "app.story", in: box.root)
+
+        XCTAssertEqual(FilePersistence.adoptLegacyFiles(into: box.root, from: box.legacy), [])
+        XCTAssertEqual(box.names(in: box.root), ["app.story"])
+    }
+
     // MARK: - Signals (Phase 1: core reactive primitive)
 
     func testSignalPayloadDelivers() {
