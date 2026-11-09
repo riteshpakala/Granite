@@ -109,10 +109,7 @@ public final class GraniteNavigation: ObservableObject {
     
     var paths: [String: () -> AnyView] = [:]
     var stack: [String] = []
-    /// One scope per pushed destination, alive from push to pop. The destination's views read
-    /// it from the environment, so popping ends every command built under the pushed screen.
-    var prospectors: [String: Prospect] = [:]
-    
+
     var level: Int {
         stack.count
     }
@@ -141,12 +138,10 @@ public final class GraniteNavigation: ObservableObject {
         let screen = NavigationPassthroughComponent<Component, EmptyGranitePayload>.Screen<Component, EmptyGranitePayload>.init(component)
         let addr = NSString(format: "%p", addressHeap(o: screen)) as String
         
-        // Read lazily: the scope is created at push time, after this closure is stored.
-        paths[addr] = { [weak self] in
+        paths[addr] = {
             AnyView(NavigationPassthroughComponent<Component,
                     EmptyGranitePayload>(screen: screen)
-                .environment(\.graniteNavigationDestinationStyle, destinationStyle)
-                .environment(\.graniteProspect, self?.prospectors[addr]))
+                .environment(\.graniteNavigationDestinationStyle, destinationStyle))
         }
         
         isActive[addr] = false
@@ -175,41 +170,31 @@ public final class GraniteNavigation: ObservableObject {
                 paths[addr] = nil
             }
         } else {
-            beginScope(for: addr)
             isActive[addr] = true
             stack.append(addr)
             self.objectWillChange.send()
+            GraniteLog("Pushed addr: \(addr)", level: .debug)
         }
         #else
-        beginScope(for: addr)
         isActive[addr] = true
         stack.append(addr)
         self.objectWillChange.send()
+        GraniteLog("Pushed addr: \(addr)", level: .debug)
         #endif
     }
 
-    /// Opens the scope a stack destination's commands attach to. Windows get none: they
-    /// are never popped, and their commands end with the window's views.
-    private func beginScope(for addr: String) {
-        prospectors[addr]?.cancel()
-        let scope = Prospect(label: self.id + " | pushed view", type: .navigation, parent: nil)
-        prospectors[addr] = scope
-        GraniteLog("Pushed addr: \(addr) for id: \(scope.id)", level: .debug)
-    }
-    
+    /// Pops the top destination. Its commands are not ended here: they keep working while the
+    /// screen animates out, and go when SwiftUI releases its views.
     func pop() {
         guard let addr = stack.last else { return }
         isActive[addr] = false
         stack.removeLast()
-        
+
         #if os(iOS) || os(visionOS)
         self.objectWillChange.send()
         #endif
-        
-        if let scope = prospectors.removeValue(forKey: addr) {
-            scope.cancel()
-            GraniteLog("Popped addr: \(addr) for id: \(scope.id) | node count: \(Prospector.nodeCount)", level: .debug)
-        }
+
+        GraniteLog("Popped addr: \(addr)", level: .debug)
     }
     
     func releaseStack() {

@@ -21,16 +21,21 @@ queue on every access, which provided no ordering guarantee.)
 
 ## Thread-safe registries
 
-The process-wide registries that back shared objects, type-shared signals, and persistence
+The process-wide registries that back shared objects, type-shared emitters, and persistence
 queues are lock-guarded and `Sendable`, so they can be touched safely from reducer queues and the
 main thread alike.
 
-## Signals and scopes
+## Events and listeners
 
-Each signal and each scope carries its own lock, held only to read or swap its own fields.
-Handlers run with no lock held, so a handler may send, observe or cancel freely. There is no
-global index of scopes: the current scope is a task-local binding, so concurrent view
-construction never contends on shared state. See <doc:SignalsAndScopes>.
+The event layer is checked by the compiler rather than asserted. ``GraniteEmitter`` is `Sendable`
+with `Sendable` values and handlers, and ``GranitePayload`` is `Sendable`, so a payload a
+background reducer sends can reach the main actor. Each emitter keeps its subscribers behind one
+lock, held only to read or swap the list: handlers run with no lock held, so a handler may send or
+subscribe freely.
+
+`listen` handlers run on the main actor: inline when the send is made on the main thread, and on
+the main queue's next turn, in order, when it is made from anywhere else. See
+<doc:EventsAndListeners>.
 
 ## Cancellation
 

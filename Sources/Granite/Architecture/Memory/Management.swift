@@ -39,21 +39,5 @@ public extension GraniteMemory {
                 GraniteLog("Error with task_info(): \(errorString)");
             }
         }
-        
-        /// Ends the live scope with this id and everything beneath it. Walks the scope tree,
-        /// so it is a debugging aid rather than a hot-path call.
-        public func removeBlock(id: UUID) {
-            Prospector.find(id: id)?.cancel()
-        }
-        
-        public func resetBlock(id: UUID) {
-            let currentLabel: String = Prospector.current?.label ?? "unknown"
-            GraniteLog("resetting memory block under: \(currentLabel)", level: .debug)
-            
-            let label = Prospector.find(id: id)?.label
-            removeBlock(id: id)
-            
-            addBlock(id: id, label: label ?? "memory-block")
-        }
     }
 }

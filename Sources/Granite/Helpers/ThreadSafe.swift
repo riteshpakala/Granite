@@ -1,5 +1,5 @@
 //
-//  Prospector.swift
+//  ThreadSafe.swift
 //  Granite
 //
 //  Created by Ritesh Pakala on 12/08/21.

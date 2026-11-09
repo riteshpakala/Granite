@@ -1,4 +1,3 @@
-import Combine
 import XCTest
 @testable import Granite
 
@@ -9,22 +8,22 @@ final class CustomEventTests: XCTestCase {
     /// Counts its sends into the center's state.
     @propertyWrapper
     struct Counter: GraniteCustomEvent {
-        final class Handle {
-            let signal = GraniteSignal.Payload<GranitePayload?>()
-            func send() { signal.send(nil) }
+        /// What the center holds: sends straight to the compiled container.
+        final class Handle: @unchecked Sendable {
+            weak var container: Container?
+            func send() { container?.fire(nil) }
         }
 
-        final class Container: GraniteEventContainer {
+        /// `@unchecked Sendable`: the tests fire it from the main thread only.
+        final class Container: GraniteEventContainer, @unchecked Sendable {
             let id = UUID()
             let label = "counter"
             let reducerType: AnyGraniteReducer.Type? = nil
             private let host: GraniteEventHost
-            private var subscription: AnyCancellable?
             private(set) var fired = 0
 
-            init(host: GraniteEventHost, signal: GraniteSignal.Payload<GranitePayload?>) {
+            init(host: GraniteEventHost) {
                 self.host = host
-                subscription = signal.publisher.sink { [weak self] payload in self?.fire(payload) }
             }
 
             func fire(_ payload: GranitePayload?) {
@@ -38,14 +37,14 @@ final class CustomEventTests: XCTestCase {
         private let handle = Handle()
         let forwarding: Forwarding = .none
         let lifecycle: Lifecycle
-        let intermediateSignal = GraniteSignal.Payload<GranitePayload?>()
-        var signal: GraniteSignal.Payload<GranitePayload?> { handle.signal }
         var wrappedValue: Handle { handle }
 
         init(_ lifecycle: Lifecycle = .none) { self.lifecycle = lifecycle }
 
         func compile(with host: GraniteEventHost) -> [any GraniteEventContainer] {
-            [Container(host: host, signal: handle.signal)]
+            let container = Container(host: host)
+            handle.container = container
+            return [container]
         }
     }
 

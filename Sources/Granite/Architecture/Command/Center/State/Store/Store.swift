@@ -10,11 +10,9 @@ import Foundation
 import SwiftUI
 
 protocol AnyGraniteStore {
- 
+
     var id : UUID { get }
-    
-    var willChange : AnyGraniteSignal { get }
-    
+
 }
 
 /*
@@ -41,10 +39,6 @@ public struct Store<State : GraniteState> : DynamicProperty, AnyGraniteStore {
         container
     }
     
-    var willChange: AnyGraniteSignal {
-        container.willChange
-    }
-    
     @ObservedObject var container : GraniteStore<State>
 
     var autoSave: Bool {
@@ -55,7 +49,7 @@ public struct Store<State : GraniteState> : DynamicProperty, AnyGraniteStore {
         container.isLoaded
     }
     
-    var didLoad: GraniteSignal {
+    var didLoad: GraniteEmitter<Void> {
         container.didLoad
     }
     

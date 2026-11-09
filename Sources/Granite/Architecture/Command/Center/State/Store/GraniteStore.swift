@@ -36,9 +36,8 @@ public class GraniteStore<State : GraniteState>: ObservableObject, Nameable, @un
 
     public let id = UUID()
 
-    let willChange: GraniteSignal.Payload<State>
-    let didLoad: GraniteSignal
-    //var didChange: (() -> Void)? = nil
+    /// Sent once the store's state has been restored from persistence.
+    let didLoad = GraniteEmitter<Void>()
 
     @Published internal var state : State
     @Published var isLoaded : Bool
@@ -53,8 +52,6 @@ public class GraniteStore<State : GraniteState>: ObservableObject, Nameable, @un
         self.storage = storage
         self.autoSave = autoSave
         self.state = .init()
-        self.willChange = .init()
-        self.didLoad = .init()
         self.isLoaded = autoSave == false
 
         $state

@@ -25,11 +25,12 @@ public enum Lifecycle: String {
 public protocol AnyEvent: Bindable {
     var forwarding: Forwarding { get }
     var lifecycle: Lifecycle { get }
-    var signal: GraniteSignal.Payload<GranitePayload?> { get }
-    var intermediateSignal: GraniteSignal.Payload<GranitePayload?> { get }
 }
 
 protocol CompileableEvent: Bindable {
+    /// What a lifecycle (`.onAppear`, `.onTask`, `.onDisappear`) or a forwarding parent
+    /// (`.before`, `.after`) sends on to fire this event's reducer.
+    var emitter: GraniteEmitter<GranitePayload?> { get }
     func compile(_ coordinator: Director, properties: CompileableEventProperties) -> [any GraniteEventContainer]
 }
 
@@ -63,13 +64,7 @@ public struct Event<Executable: EventExecutable>: AnyEvent {
     public var expedition: Executable
     public let forwarding: Forwarding
     public let lifecycle: Lifecycle
-    
-    public let intermediateSignal: GraniteSignal.Payload<GranitePayload?> = .init()
-    
-    public var signal: GraniteSignal.Payload<GranitePayload?> {
-        expedition.signal
-    }
-    
+
     var kind: Kind
     var interval: Double = 0.0
     
@@ -110,6 +105,10 @@ extension CompileableEvent {
 }
 
 extension Event: CompileableEvent {
+    var emitter: GraniteEmitter<GranitePayload?> {
+        expedition.emitter
+    }
+
     //TODO: profile
     func compile(_ coordinator: Director, properties: CompileableEventProperties) -> [any GraniteEventContainer] {
         let container: ReducerContainer<Executable>
@@ -143,11 +142,7 @@ extension Event: CompileableEvent {
             guard event.forwarding != .none else {
                 continue
             }
-            if container.sideEffects[event.forwarding] == nil {
-                container.sideEffects[event.forwarding] = [event.signal]
-            } else {
-                container.sideEffects[event.forwarding]?.append(event.signal)
-            }
+            container.sideEffects[event.forwarding, default: []].append(compileableEvent.emitter)
         }
         
         return containers

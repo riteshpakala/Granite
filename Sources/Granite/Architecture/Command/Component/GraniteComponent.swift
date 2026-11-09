@@ -53,7 +53,9 @@ public protocol GraniteComponent: AnyGraniteComponent, Identifiable, View, Finda
     associatedtype ComponentView: View
 
     var center: GenericGraniteCenter { get set }
-    var listeners: Void { get }
+    /// Registers this component's `listen` handlers. Run on appear; the handlers last while the
+    /// component is on screen and run on the main actor.
+    @MainActor var listeners: Void { get }
     @ViewBuilder var view: Self.ComponentView { get }
 }
 
@@ -94,7 +96,7 @@ extension GraniteComponent {
         return self
     }
     
-    public var listeners: Void {
+    @MainActor public var listeners: Void {
         ({ })()
     }
 }

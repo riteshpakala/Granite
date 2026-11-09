@@ -14,19 +14,13 @@ extension GraniteComponent {
         // `locate` is a Mirror walk; resolve it once per body evaluation.
         let locate = self.locate
         let geometry = locate?.command.center.state.findGeometry()
-        let prospect = locate?.command.prospect
-        
+
         return ZStack {
             if let geometry {
                 geometryView(geometry, locate: locate)
             } else {
                 lifecycle(view, locate: locate)
             }
-        }
-        // Children's commands attach under this component's scope. Left untouched when
-        // there is no command, so the enclosing scope keeps flowing through.
-        .transformEnvironment(\.graniteProspect) { scope in
-            if let prospect { scope = prospect }
         }
     }
 }

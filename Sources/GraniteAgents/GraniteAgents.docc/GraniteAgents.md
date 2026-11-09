@@ -31,7 +31,7 @@ run. An app that links the package finds it through the ``GraniteRoster``, with 
 its own, one call each: <doc:RemoteAgents>. The standard both follow is `Schema/GraniteAgent.md`,
 `granite-agent/1`.
 
-`GraniteAgents` builds on `Granite` and imports nothing else: Foundation and Granite's own signals.
+`GraniteAgents` builds on `Granite` and imports nothing else: Foundation and Granite's own events.
 
 ## Topics
 

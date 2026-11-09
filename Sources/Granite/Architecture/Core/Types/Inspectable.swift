@@ -8,8 +8,7 @@
 
 import Foundation
 
-/// Something with a stable identity whose observers Granite can tear down.
+/// Something with a stable identity.
 public protocol Inspectable {
     var id: UUID { get }
-    func didRemoveObservers() -> Void
 }

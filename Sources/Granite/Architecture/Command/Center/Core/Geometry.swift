@@ -12,8 +12,13 @@ import SwiftUI
 /*
  Container to house a publishable GeomotryProxy for easy
  access in a GraniteState.
+
+ `@unchecked Sendable` because `GraniteModel` is `Sendable` and this is a class with a mutable
+ `@Published` value. The invariant: `value` is only written by `Geometry.update`, which
+ `GraniteComponent`'s geometry reader calls from SwiftUI on the main thread, and only read by
+ views on the main thread.
 */
-public class GeometryProxyContainer: ObservableObject, GraniteModel {
+public class GeometryProxyContainer: ObservableObject, GraniteModel, @unchecked Sendable {
     required public init(from decoder: Decoder) throws {
         value = nil
     }

@@ -27,6 +27,71 @@ protocol AnyReducerContainer: GraniteEventContainer {
     func fire(_ payload: GranitePayload?)
 }
 
+/// What a reducer's emitters reach in its container.
+///
+/// Not generic, so the closures that subscribe a container and hop it between threads are formed
+/// in ``GraniteReducerWiring``, outside `ReducerContainer<Event>`, and capture no metatype.
+protocol GraniteReducerReceiving: AnyObject, Sendable {
+    func receive(_ value: GranitePayload?)
+    func route(_ value: GranitePayload?)
+    func commit(_ value: GranitePayload?)
+    func nudge(_ value: GranitePayload)
+}
+
+enum GraniteReducerWiring {
+    /// Subscribes `receiver`, held weakly, to the reducer's sends.
+    static func receive(from emitter: GraniteEmitter<GranitePayload?>,
+                        into receiver: any GraniteReducerReceiving,
+                        key: GraniteEmitterKey) {
+        emitter.on(receiver, key: key) { receiver, value in
+            receiver.receive(value)
+        }
+    }
+
+    /// Subscribes `receiver`, held weakly, to the reducer's `@Notify` nudges.
+    static func nudges(from emitter: GraniteEmitter<GranitePayload>,
+                       into receiver: any GraniteReducerReceiving,
+                       key: GraniteEmitterKey) {
+        emitter.on(receiver, key: key) { receiver, value in
+            receiver.nudge(value)
+        }
+    }
+
+    /// The debounce or throttle the interaction asks for, delivering on `queue`. It holds the
+    /// receiver weakly, and the receiver owns it, so a pending value goes with the receiver.
+    static func timing(_ interaction: GraniteReducerInteraction,
+                       on queue: DispatchQueue,
+                       for receiver: any GraniteReducerReceiving) -> (@Sendable (GranitePayload?) -> Void)? {
+        switch interaction {
+        case .debounce(let interval):
+            let debounce = GraniteDebounce<GranitePayload?>(interval: interval, queue: queue) { [weak receiver] value in
+                receiver?.route(value)
+            }
+            return { debounce.receive($0) }
+        case .throttle(let interval):
+            let throttle = GraniteThrottle<GranitePayload?>(interval: interval, queue: queue) { [weak receiver] value in
+                receiver?.route(value)
+            }
+            return { throttle.receive($0) }
+        case .basic:
+            return nil
+        }
+    }
+
+    /// Commits on `thread` when the reducer names one, else at once on this thread.
+    static func route(_ value: GranitePayload?,
+                      to receiver: any GraniteReducerReceiving,
+                      on thread: DispatchQueue?) {
+        if let thread {
+            thread.async { [weak receiver] in
+                receiver?.commit(value)
+            }
+        } else {
+            receiver.commit(value)
+        }
+    }
+}
+
 //TODO: MAJOR
 //When an @Event is inside a center it cannot be declared in a reducer
 //Check @Event var sync: Sync.Reducer (May only be the case if the Relay/Service is in .online mode)
@@ -37,7 +102,7 @@ protocol AnyReducerContainer: GraniteEventContainer {
 // `@unchecked Sendable`: the container coordinates a reducer across its own serial queue
 // and structured-concurrency `Task`s. Its mutable state is only touched from that serial
 // queue / the reducer's task, so the unchecked conformance asserts that manual discipline.
-final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Nameable, @unchecked Sendable {
+final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, GraniteReducerReceiving, Nameable, @unchecked Sendable {
     public var id : UUID = .init()
     
     public var label: String {
@@ -61,16 +126,17 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
     var setState: ((AnyGraniteState) -> Void)?
     
     private let reducer: Event?
-    var sideEffects: [Forwarding : [GraniteSignal.Payload<GranitePayload?>]] = [:]
+    /// The emitters of `@Event(.before)` / `@Event(.after)` reducers nested in this one.
+    var sideEffects: [Forwarding : [GraniteEmitter<GranitePayload?>]] = [:]
     private let isTimed: Bool
     public let interval: Double
     private var timer: DisplayLinkTimer? = nil
     private var isOnline: Bool
     private var executionTask: Task<Void, Error>? = nil
 
-    /// This container's scope, created under its director's scope in `setup`. The reducer's
-    /// signal subscriptions live here and end when the container does.
-    private var prospect: Prospect? = nil
+    /// The debounce or throttle an `@Event(debounce:)` / `@Event(throttle:)` reducer receives
+    /// through; nil for an immediate one. Owned here, so a pending value goes with the container.
+    private var timing: (@Sendable (GranitePayload?) -> Void)? = nil
 
     /// Gate for `GraniteReducerBehavior.persistentStreamingTask`: true while an
     /// execution owns the container. `NSLock` rather than the container's own
@@ -107,79 +173,51 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
         }
     }
     
-    deinit {
-        prospect?.cancel()
-    }
-
+    /// Takes the reducer: clears whoever received from it before, then receives its sends.
+    ///
+    /// The container subscribes itself, held weakly, so nothing but the command keeps it alive
+    /// and nothing needs undoing when the command goes.
     func setup(_ coordinator: Director) {
         self.coordinator = coordinator
 
-        prospect?.cancel()
-        let prospect = Prospect(id: id,
-                                label: String(reflecting: Event.self),
-                                type: .event,
-                                parent: coordinator.prospect)
-        self.prospect = prospect
-        prospect.withScope {
-            bind()
-            observe()
-        }
-    }
-    
-    func bind() {
         guard let reducer = self.reducer else {
             GraniteLog("🛥: No reducer", level: .error)
             return
         }
-        
-        reducer.signal.bind("signal")
-        reducer.beamSignal.bind("beamSignal")
-    }
-    
-    func observe() {
-        guard let reducer = self.reducer else {
-            GraniteLog("🛥: No reducer", level: .error)
-            return
-        }
-        
-        switch reducer.interaction {
-        case .debounce(let interval):
-            reducer.signal.debounced(interval, on: queue) += { [weak self] value in
-                if let thread = reducer.thread {
-                    thread.async { [weak self] in
-                        self?.commit(value)
-                    }
-                } else {
-                    self?.commit(value)
-                }
-            }
-        case .throttle(let interval):
-            reducer.signal.throttled(interval, on: queue) += { [weak self] value in
-                if let thread = reducer.thread {
-                    thread.async { [weak self] in
-                        self?.commit(value)
-                    }
-                } else {
-                    self?.commit(value)
-                }
-            }
-        case .basic:
-            reducer.signal += { [weak self] value in
-                if let thread = reducer.thread {
-                    thread.async { [weak self] in
-                        self?.commit(value)
-                    }
-                } else {
-                    self?.commit(value)
-                }
-            }
-        }
-        
+
+        // A fresh owner: the reducer's own emitter and its beam drop whoever received before.
+        reducer.emitter.removeAll()
+        reducer.beamEmitter.removeAll()
+
+        // Keyed by this container, so setting up again replaces its own subscriptions and never
+        // another container's: the notify emitter is shared by every instance of a reducer type.
+        let key = GraniteEmitterKey("granite.reducer.container.\(id.uuidString)")
+        timing = GraniteReducerWiring.timing(reducer.interaction, on: queue, for: self)
+        GraniteReducerWiring.receive(from: reducer.emitter, into: self, key: key)
         if reducer.isNotifiable {
-            reducer.observe()
+            GraniteReducerWiring.nudges(from: reducer.notifyEmitter, into: self, key: key)
         }
     }
-    
+
+    /// A send reached the reducer.
+    func receive(_ value: GranitePayload?) {
+        if let timing {
+            timing(value)
+        } else {
+            route(value)
+        }
+    }
+
+    /// Commits on the reducer's own queue when it names one, else on this thread.
+    func route(_ value: GranitePayload?) {
+        GraniteReducerWiring.route(value, to: self, on: reducer?.thread)
+    }
+
+    /// A `@Notify` nudge: sent on as if the reducer had been sent the payload.
+    func nudge(_ value: GranitePayload) {
+        reducer?.send(value)
+    }
+
     func commit(_ value: GranitePayload?) {
         // A running `persistentStreamingTask` OWNS this container, so the send
         // is dropped WHOLE — decided before `update(value)`, which is what
@@ -261,8 +299,8 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
         //TODO: think about the necessity of before
         //it does not feel standard or correct to have
         //
-        for signal in (sideEffects[.before] ?? []){
-            signal.send(reducer?.payload as? GranitePayload)
+        for forwarded in (sideEffects[.before] ?? []){
+            forwarded.send(reducer?.payload as? GranitePayload)
         }
         
         //TODO: this CAN be a queue, before it hits an after
@@ -272,8 +310,8 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
             runEffect(for: newState)
         }
 
-        for signal in (sideEffects[.after] ?? []){
-            signal.send(reducer?.payload as? GranitePayload)
+        for forwarded in (sideEffects[.after] ?? []){
+            forwarded.send(reducer?.payload as? GranitePayload)
         }
     }
 
@@ -282,8 +320,8 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
         //TODO: think about the necessity of before
         //it does not feel standard or correct to have
         //
-        for signal in (sideEffects[.before] ?? []){
-            signal.send(reducer?.payload as? GranitePayload)
+        for forwarded in (sideEffects[.before] ?? []){
+            forwarded.send(reducer?.payload as? GranitePayload)
         }
         
         //TODO: this CAN be a queue, before it hits an after
@@ -294,8 +332,8 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
             runEffect(for: newState)
         }
 
-        for signal in (sideEffects[.after] ?? []){
-            signal.send(reducer?.payload as? GranitePayload)
+        for forwarded in (sideEffects[.after] ?? []){
+            forwarded.send(reducer?.payload as? GranitePayload)
         }
     }
     
@@ -304,8 +342,8 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
     /// Every `stream(state)` call is dispatched to the main thread so SwiftUI sees each
     /// incremental update immediately — no batching, no snapshot overwrite.
     func executeStreamingAsync() async {
-        for signal in (sideEffects[.before] ?? []) {
-            signal.send(reducer?.payload as? GranitePayload)
+        for forwarded in (sideEffects[.before] ?? []) {
+            forwarded.send(reducer?.payload as? GranitePayload)
         }
 
         await self.reducer?.executeStreaming(coordinator?.getState()) { [weak self] newState in
@@ -322,8 +360,8 @@ final class ReducerContainer<Event : EventExecutable>: AnyReducerContainer, Name
             runEffect(for: latest)
         }
 
-        for signal in (sideEffects[.after] ?? []) {
-            signal.send(reducer?.payload as? GranitePayload)
+        for forwarded in (sideEffects[.after] ?? []) {
+            forwarded.send(reducer?.payload as? GranitePayload)
         }
     }
 

@@ -54,7 +54,7 @@ public class GraniteNotify {
     public func send(_ payload: AnyGranitePayload?) {
         for (key, value) in notifications {
             notifications[key] = nil
-            value.nudgeNotifyGraniteSignal.send(payload?.asGranitePayload ?? EmptyGranitePayload())
+            value.notifyEmitter.send(payload?.asGranitePayload ?? EmptyGranitePayload())
         }
         
         for (key, value) in compiledNotifications {

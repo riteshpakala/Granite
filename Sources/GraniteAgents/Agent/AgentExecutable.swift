@@ -11,8 +11,6 @@ import Granite
 ///   lifecycle has been reduced and committed after its last frames, so the state read next is
 ///   complete. A reducer's effect awaits it, then writes through its service's writer and resolves its ticket.
 public final class AgentExecutable<A: GraniteAgent>: @unchecked Sendable {
-    /// Granite's lifecycle sends here (`@Agent(.onTask)`).
-    public let signal = GraniteSignal.Payload<GranitePayload?>()
     /// The declaration's policy; nil means the agent's own `A.concurrency`.
     public let concurrency: AgentConcurrency?
     private let lock = NSLock()
@@ -108,7 +106,7 @@ public final class AgentExecutable<A: GraniteAgent>: @unchecked Sendable {
     func compile(with host: GraniteEventHost) -> AgentRunContainer<A> {
         lock.withLock {
             if let container { return container }
-            let made = AgentRunContainer<A>(host: host, label: label, signal: signal, concurrency: concurrency ?? A.concurrency)
+            let made = AgentRunContainer<A>(host: host, label: label, concurrency: concurrency ?? A.concurrency)
             made.resolver = resolver
             container = made
             return made

@@ -58,32 +58,28 @@ extension AnyGraniteReducer {
         }
     }
     
-    public var valueSignal : GraniteSignal.Payload<GranitePayload?> {
-        Storage.shared.value(at: Storage.EventSignalIdentifierKey(id: self.id, keyPath: \AnyGraniteReducer.valueSignal)) {
-            GraniteSignal.Payload<GranitePayload?>()
+    /// Where `@Notify` nudges this reducer. The executable hosting it re-sends what arrives.
+    var notifyEmitter : GraniteEmitter<GranitePayload> {
+        Storage.shared.value(at: Storage.EventSignalIdentifierKey(id: self.id, keyPath: \AnyGraniteReducer.notifyEmitter)) {
+            GraniteEmitter<GranitePayload>()
         }
     }
-    
-    public var nudgeNotifyGraniteSignal : GraniteSignal.Payload<GranitePayload> {
-        Storage.shared.value(at: Storage.EventSignalIdentifierKey(id: self.id, keyPath: \AnyGraniteReducer.nudgeNotifyGraniteSignal)) {
-            GraniteSignal.Payload<GranitePayload>()
-        }
-    }
-    
-    //shared (signals ui receivers)
-    public var broadcast : GraniteSignal.Payload<GranitePayload?> {
+
+    /// Shared by every instance of this reducer type: what a reducer sends here reaches every
+    /// `listen(.broadcast(…))` on any of them. Listeners are held weakly, by whoever listens.
+    public var broadcast : GraniteEmitter<GranitePayload?> {
         Storage.shared.value(at: Storage.EventSignalIdentifierKey(id: self.idSync, keyPath: \AnyGraniteReducer.broadcast)) {
-            GraniteSignal.Payload<GranitePayload?>()
+            GraniteEmitter<GranitePayload?>()
         }
     }
-    
-    public func send() {
-        valueSignal.send(nil)
-    }
-    
-    public func send(_ payload: GranitePayload) {
-        valueSignal.send(payload)
-    }
+
+    /// Kept for source compatibility. Sending from the reducer value itself has never reached a
+    /// container; send through the executable (`center.reducer.send()`) instead.
+    public func send() {}
+
+    /// Kept for source compatibility. Sending from the reducer value itself has never reached a
+    /// container; send through the executable (`center.reducer.send(_:)`) instead.
+    public func send(_ payload: GranitePayload) {}
     
     public var notifiable: Bool {
         false
@@ -172,10 +168,11 @@ extension GraniteReducer {
         .none
     }
     
-    //instanced version of broadcast
-    public var beam : GraniteSignal.Payload<GranitePayload?> {
+    /// The instanced version of ``AnyGraniteReducer/broadcast``: what a reducer sends here reaches
+    /// the one `listen(.beam)` made last.
+    public var beam : GraniteEmitter<GranitePayload?> {
         Storage.shared.value(at: "\(String(describing: self))_beam") {
-            GraniteSignal.Payload<GranitePayload?>()
+            GraniteEmitter<GranitePayload?>()
         }
     }
 }
@@ -197,27 +194,33 @@ extension GraniteReducer {
 public protocol EventExecutable {
     var label : String { get }
     var reducerType : AnyGraniteReducer.Type { get }
-    var signal : GraniteSignal.Payload<GranitePayload?> { get }
-    var intermediateSignal : GraniteSignal.Payload<GranitePayload?> { get }
-    var beamSignal: GraniteSignal.Payload<GranitePayload?> { get }
-    
+    /// What `send` sends on: the reducer's container receives it, and so do
+    /// `listen(.bubble(…))` handlers.
+    var emitter : GraniteEmitter<GranitePayload?> { get }
+    /// The reducer's `beam`, which its container clears when it takes the reducer.
+    var beamEmitter: GraniteEmitter<GranitePayload?> { get }
+    /// Where `@Notify` nudges the reducer; its container re-sends what arrives.
+    var notifyEmitter: GraniteEmitter<GranitePayload> { get }
+
     var payload: AnyGranitePayload? { get set }
     var events: [AnyEvent] { get }
     var isNotifiable: Bool { get }
     var behavior: GraniteReducerBehavior { get }
     var interaction: GraniteReducerInteraction { get }
-    
+
     var thread: DispatchQueue? { get }
-    
+
     func setOnline(_ isOnline: Bool)
-    
-    func observe()
-    
+
     func send()
     func send(_ payload: GranitePayload)
-    
+
+    /// Runs `handler` on the main actor for each payload the reducer sends to `kind`.
+    ///
+    /// Inside a component's `listeners`, the handler lasts while the component is on screen.
+    /// Elsewhere it lasts as long as this reducer, or until a later `listen` takes its place.
     @discardableResult
-    func listen(_ kind: GraniteReducerListenKind, _ handler: @escaping (GranitePayload?) -> Void ) -> Self
+    func listen(_ kind: GraniteReducerListenKind, _ handler: @escaping @MainActor @Sendable (GranitePayload?) -> Void ) -> Self
     
     func update(_ payload: GranitePayload?)
     func execute(_ state: AnyGraniteState?) -> AnyGraniteState
@@ -253,27 +256,27 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     }
     
     private var isOnline: Bool = false
-    
-    public var signal : GraniteSignal.Payload<GranitePayload?> {
-        valueSignal
-    }
-    
+
+    /// What ``send()`` and ``send(_:)`` send on. Its container receives first, then any
+    /// `listen(.bubble(…))` handlers.
+    public let emitter = GraniteEmitter<GranitePayload?>()
+
     public var thread: DispatchQueue? {
         expedition.thread
     }
-    
-    public var valueSignal : GraniteSignal.Payload<GranitePayload?> = .init()
-     
-    public var intermediateSignal : GraniteSignal.Payload<GranitePayload?> = .init()
-    
-    public var beamSignal: GraniteSignal.Payload<GranitePayload?> {
+
+    public var beamEmitter: GraniteEmitter<GranitePayload?> {
         expedition.beam
     }
-    
-    public var synchronousGraniteSignalValue : GraniteSignal.Payload<GranitePayload?> {
-        expedition.valueSignal
+
+    public var notifyEmitter: GraniteEmitter<GranitePayload> {
+        expedition.notifyEmitter
     }
-    
+
+    /// Handlers registered by `listen` outside any `listeners` body, such as from a view's
+    /// `.task`. They last as long as this reducer, or until a later `listen` takes their place.
+    let ownListeners = GraniteListeners()
+
     private var payloadFindAttempted: Bool = false
     public var payload : AnyGranitePayload?
 
@@ -297,14 +300,7 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     }
     
     public var interaction: GraniteReducerInteraction
-    
-    //instanced signals (Receiver)
-    internal var beamCancellables: [GraniteCancellable] = []
-    //shared signals (Receiver)
-    internal var broadcastCancellables: [String : GraniteCancellable] = [:]
-    //component tree (Receiver)
-    internal var bubbledCancellables: [String : GraniteCancellable] = [:]
-    
+
     required public init() {
         self.interaction = .basic
         //self.payload = expedition.findPayload()
@@ -318,21 +314,6 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
     required public init(throttle interval: Double) {
         self.interaction = .throttle(interval)
         //self.payload = expedition.findPayload()
-    }
-    
-    deinit {
-        // Cancel only THIS instance's subscriptions. We deliberately do NOT call
-        // `expedition.beam.removeObservers()` / `expedition.broadcast.removeObservers()`
-        // here: `beam` and `broadcast` are type-shared signals (keyed by reducer type in
-        // `Storage`), so `removeAllObservers()` would drop EVERY live instance's observers —
-        // tearing down sibling components' subscriptions.
-        // Cancelling the per-instance cancellables removes exactly this instance's observer.
-        beamCancellables.forEach { $0.cancel() }
-        beamCancellables.removeAll()
-        broadcastCancellables.values.forEach { $0.cancel() }
-        broadcastCancellables = [:]
-        bubbledCancellables.values.forEach { $0.cancel() }
-        bubbledCancellables = [:]
     }
     
     public func execute(_ state: AnyGraniteState?) -> AnyGraniteState {
@@ -407,48 +388,55 @@ open class GraniteReducerExecutable<Expedition: GraniteReducer>: EventExecutable
         }
     }
     
-    public func observe() {
-        expedition.nudgeNotifyGraniteSignal += { [weak self] value in
-            self?.send(value)
-        }
-    }
-    
     @discardableResult
-    public func listen(_ kind: GraniteReducerListenKind, _ handler: @escaping (GranitePayload?) -> Void ) -> Self {
+    public func listen(_ kind: GraniteReducerListenKind, _ handler: @escaping @MainActor @Sendable (GranitePayload?) -> Void ) -> Self {
+        let binding = GraniteListeners.bound
+        let listeners: GraniteListeners
+        if binding.isBound {
+            // Called from a `listeners` body whose owner has since gone (for instance from a task
+            // the body started): there is no one left to deliver to.
+            guard let bound = binding.set else { return self }
+            listeners = bound
+        } else {
+            listeners = ownListeners
+        }
+
         switch kind {
         case .beam:
             // `beam` is keyed by `String(describing: reducer)`, so it is effectively shared by
             // type; clearing it keeps "last listener wins" across instances.
-            beamCancellables.forEach { $0.cancel() }
-            beamCancellables.removeAll()
-            expedition.beam.removeAllObservers()
-            beamCancellables.append(expedition.beam += handler)
-        case .broadcast(let id):
-            broadcastCancellables[id]?.cancel()
-            broadcastCancellables[id] = (expedition.broadcast += handler)
-        case .bubble(let id):
-            bubbledCancellables[id]?.cancel()
-            bubbledCancellables[id] = signal += handler
+            expedition.beam.removeAll()
+            listeners.register(.init(executable: id, kind: .beam, name: ""),
+                               on: expedition.beam,
+                               handler: handler)
+        case .broadcast(let name):
+            listeners.register(.init(executable: id, kind: .broadcast, name: name),
+                               on: expedition.broadcast,
+                               handler: handler)
+        case .bubble(let name):
+            listeners.register(.init(executable: id, kind: .bubble, name: name),
+                               on: emitter,
+                               handler: handler)
         }
         return self
     }
     @discardableResult
-    public func listen(_ handler: @escaping (GranitePayload?) -> Void ) -> Self {
+    public func listen(_ handler: @escaping @MainActor @Sendable (GranitePayload?) -> Void ) -> Self {
         self.listen(.beam, handler)
     }
-    
+
     public func send() {
         if self.payload is GranitePayload {
             self.payload = nil
         } else {
             self.payload?.clear()
         }
-        signal.send(nil)
+        emitter.send(nil)
     }
-    
+
     public func send(_ payload: GranitePayload) {
         update(payload)
-        signal.send(payload)
+        emitter.send(payload)
     }
     
     public func attach(_ payload: GranitePayload) {

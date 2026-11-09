@@ -34,42 +34,27 @@ final public class GraniteRelay<Service: GraniteService>: Inspectable, Findable,
     
     public let id : UUID = .init()
 
-    /// The relay's scope. Relays are app-lifetime singletons held by `SharedRepository`, so
-    /// the scope is top-level: it must never end because whichever view first touched the
-    /// relay went away.
-    public let prospect: Prospect
-    
     var service: Service
-    
+
     var lifecycle: GraniteLifecycle = .none
-    
+
     internal var isSilenced: Bool = false
-    
+
     fileprivate var behavior: GraniteRelayBehavior = .normal
-    
+
     internal var reducers: [any GraniteEventContainer] = []
-    internal var cancellables = Set<AnyCancellable>()
-    
+
     fileprivate var kind: GraniteRelayKind
     fileprivate var isDiscoverable: Bool
-    
+
     init(isDiscoverable: Bool = false) {
         self.kind = .offline
         self.isDiscoverable = isDiscoverable
-        
-        let prospect = Prospect(id: id, label: String(reflecting: Service.self), type: .relay, parent: nil)
-        self.prospect = prospect
-        service = prospect.withScope { Service() }
-        prospect.withScope { setup() }
+
+        service = Service()
+        setup()
     }
-    
-    deinit {
-        //GraniteLog("relay deinit 🛸: \(NAME)", level: .debug)
-        prospect.cancel()
-        cancellableBag.forEach { $0.cancel() }
-        cancellableBag.removeAll()
-    }
-    
+
     //deprecated
     public func sharableLoaded() {
         service.center.findStore()?.restore()
@@ -159,12 +144,6 @@ extension GraniteRelay {
         guard let newState = state as? Service.GenericGraniteCenter.GenericGraniteState else { return }
         
         self.update(newState)
-    }
-}
-
-extension GraniteRelay {
-    public func didRemoveObservers() {
-        
     }
 }
 

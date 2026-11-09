@@ -20,7 +20,6 @@ final class AgentRunContainer<A: GraniteAgent>: GraniteEventContainer, @unchecke
     private let agent = A()
     /// The declaration's policy, else the agent's own.
     private let concurrency: AgentConcurrency
-    private var lifecycleSubscription: GraniteCancellable?
     private let lock = NSLock()
     private var runs: [String: LiveRun] = [:]
     private var waiting: [(run: AgentRunID, input: A.Input)] = []
@@ -55,16 +54,13 @@ final class AgentRunContainer<A: GraniteAgent>: GraniteEventContainer, @unchecke
         var result: Result<AgentOutcome, Error>?
     }
 
-    init(host: GraniteEventHost, label: String, signal: GraniteSignal.Payload<GranitePayload?>, concurrency: AgentConcurrency) {
+    init(host: GraniteEventHost, label: String, concurrency: AgentConcurrency) {
         self.host = host
         self.label = label
         self.concurrency = concurrency
-        // The host's lifecycle (`@Agent(.onTask)`) sends on the wrapper's signal; the observation
-        // lives in the command's scope and ends with it.
-        lifecycleSubscription = signal.observe(in: host.prospect) { [weak self] payload in self?.fire(payload) }
     }
 
-    /// Granite's own entry: a lifecycle send, or `dispatch` by reducer type.
+    /// Granite's own entry: the host's lifecycle (`@Agent(.onTask)`), or `dispatch` by reducer type.
     func fire(_ payload: GranitePayload?) {
         guard let input = A.lifecycleInput else { return }
         onMain { self.start(input) }

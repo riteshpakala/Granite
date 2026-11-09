@@ -27,7 +27,8 @@ public protocol GraniteService {
 }
 
 extension GraniteService {
-    public var didLoad: GraniteSignal {
+    /// Sent once the service's state has been restored from persistence.
+    public var didLoad: GraniteEmitter<Void> {
         locate?.command.center.findStore()?.didLoad ?? .init()
     }
     

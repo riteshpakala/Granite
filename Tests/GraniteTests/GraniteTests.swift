@@ -221,20 +221,6 @@ final class GraniteTests: XCTestCase {
         XCTAssertEqual(box.names(in: box.root), ["app.story"])
     }
 
-    // MARK: - Signals (Phase 1: core reactive primitive)
-
-    func testSignalPayloadDelivers() {
-        let signal = GraniteSignal.Payload<Int>()
-        var received: [Int] = []
-        let cancellable = signal += { value in received.append(value) }
-
-        signal.send(1)
-        signal.send(2)
-
-        XCTAssertEqual(received, [1, 2])
-        cancellable.cancel()
-    }
-
     func testDirectReducerPayloadIsReplacedOnEveryUpdate() throws {
         let reducer = DirectPayloadReducer.Reducer()
 

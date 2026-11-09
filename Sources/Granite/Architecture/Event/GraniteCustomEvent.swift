@@ -16,8 +16,9 @@ import Foundation
  wrapper to `GraniteCustomEvent` and `compile(with:)` runs when the hosting command compiles,
  with a host that reads the command's state, commits a new one and dispatches sibling reducers.
  The containers it returns are kept by the command and fired by reducer type, exactly as its
- own are (`GraniteEffect.chain`, `dispatch`). Lifecycle works unchanged: a wrapper whose
- `lifecycle` is `.onTask` has its `signal` sent when the component's task runs.
+ own are (`GraniteEffect.chain`, `dispatch`). Lifecycle works too: a wrapper whose `lifecycle`
+ is `.onTask` (or `.onAppear`, `.onDisappear`) has the first container `compile(with:)` returned
+ fired, through `fire(_:)`, when the component's task runs.
 
  Craft's `@Agent` — a reducer that runs an ML operation and streams frames into state — is
  the first such wrapper; Granite itself stays free of what the wrapper computes.
@@ -29,7 +30,10 @@ public protocol GraniteCustomEvent: AnyEvent {
 }
 
 /// What a compiled event keeps in its command: enough to be found by reducer type and fired.
-public protocol GraniteEventContainer: AnyObject {
+///
+/// `Sendable`: the command fires `.onAppear` containers from its own queue, and sends reach a
+/// container from whichever thread made them.
+public protocol GraniteEventContainer: AnyObject, Sendable {
     var id: UUID { get }
     var label: String { get }
     /// The reducer type this container hosts, used to route ``GraniteEffect/chain(_:payload:)``.
@@ -56,11 +60,6 @@ public struct GraniteEventHost: @unchecked Sendable {
 
     /// Whether the command is attached or appeared.
     public var isAvailable: Bool { director?.isAvailable ?? false }
-
-    /// The command's scope, nil once the command is gone. A wrapper that observes signals
-    /// itself can store its subscriptions here so they end with the command; `compile(with:)`
-    /// already runs with this scope bound, so `signal += { … }` there lands in it.
-    public var prospect: Prospect? { director?.prospect }
 
     /// The command's state as it stands now; nil once the command is gone.
     public func state() -> AnyGraniteState? { director?.getState() }

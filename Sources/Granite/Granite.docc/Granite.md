@@ -73,13 +73,11 @@ struct Increment: GraniteReducer {
 - ``GraniteBubble``
 - ``On``
 
-### Signals & Scopes
+### Events & Listeners
 
-- <doc:SignalsAndScopes>
-- ``GraniteSignal``
-- ``Prospect``
-- ``Prospector``
-- ``GraniteCancellable``
+- <doc:EventsAndListeners>
+- ``GraniteEmitter``
+- ``GraniteEmitterKey``
 
 ### Services & Relays
 

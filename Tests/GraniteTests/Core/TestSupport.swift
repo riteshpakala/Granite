@@ -21,3 +21,18 @@ final class Recorder<Value>: @unchecked Sendable {
 
 /// An object whose lifetime a test can watch through a weak reference.
 final class Probe: @unchecked Sendable {}
+
+/// A mutable reference a test's handlers can share.
+final class Holder<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Value
+
+    init(_ value: Value) {
+        storage = value
+    }
+
+    var value: Value {
+        get { lock.lock(); defer { lock.unlock() }; return storage }
+        set { lock.lock(); defer { lock.unlock() }; storage = newValue }
+    }
+}

@@ -16,8 +16,12 @@ public protocol AnyGranitePayload {
     var asGranitePayload: GranitePayload? { get }
 }
 
-public protocol GranitePayload: AnyGranitePayload {
-    
+/// A value a reducer takes, or a reducer sends to its listeners.
+///
+/// `Sendable`: a payload crosses threads. A background reducer broadcasts it, and listeners
+/// receive it on the main actor. Payloads are values, so most conform with nothing to add.
+public protocol GranitePayload: AnyGranitePayload, Sendable {
+
 }
 
 extension GranitePayload {
