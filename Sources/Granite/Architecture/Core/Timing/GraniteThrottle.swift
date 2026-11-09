@@ -33,7 +33,7 @@ final class GraniteThrottle<Value: Sendable>: Sendable {
     private let queue: DispatchQueue
     private let latest: Bool
     private let handler: @Sendable (Value) -> Void
-    private let state = GraniteLocked(State())
+    private let state = GraniteLock(State())
 
     init(interval: Double, queue: DispatchQueue, latest: Bool = true, handler: @escaping @Sendable (Value) -> Void) {
         self.interval = interval
@@ -45,20 +45,24 @@ final class GraniteThrottle<Value: Sendable>: Sendable {
     func receive(_ value: Value) {
         let latest = self.latest
         let interval = self.interval
-        let schedule = state.withLock { state -> Schedule in
+        // A value it replaces is released after the lock, never under it.
+        let (schedule, replaced) = state.withLock { state -> (Schedule, Value?) in
+            var replaced: Value? = nil
             if latest || state.hasPending == false {
+                replaced = state.pending
                 state.pending = value
                 state.hasPending = true
             }
-            guard state.isScheduled == false else { return .none }
+            guard state.isScheduled == false else { return (.none, replaced) }
             state.isScheduled = true
 
             if let lastEmission = state.lastEmission {
                 let next = lastEmission + interval
-                if next > .now() { return .at(next) }
+                if next > .now() { return (.at(next), replaced) }
             }
-            return .now
+            return (.now, replaced)
         }
+        withExtendedLifetime(replaced) {}
 
         switch schedule {
         case .none:

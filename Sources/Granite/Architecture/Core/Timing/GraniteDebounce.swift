@@ -21,7 +21,7 @@ final class GraniteDebounce<Value: Sendable>: Sendable {
     private let interval: Double
     private let queue: DispatchQueue
     private let handler: @Sendable (Value) -> Void
-    private let state = GraniteLocked(State())
+    private let state = GraniteLock(State())
 
     init(interval: Double, queue: DispatchQueue, handler: @escaping @Sendable (Value) -> Void) {
         self.interval = interval
@@ -30,11 +30,14 @@ final class GraniteDebounce<Value: Sendable>: Sendable {
     }
 
     func receive(_ value: Value) {
-        let ticket = state.withLock { state -> UInt64 in
+        // The value it replaces is released after the lock, never under it.
+        let (ticket, replaced) = state.withLock { state -> (UInt64, Value?) in
+            let replaced = state.pending
             state.pending = value
             state.generation &+= 1
-            return state.generation
+            return (state.generation, replaced)
         }
+        withExtendedLifetime(replaced) {}
         // An earlier value's work still runs, finds a newer ticket and does nothing.
         queue.asyncAfter(deadline: .now() + interval) { [weak self] in
             self?.fire(ticket)

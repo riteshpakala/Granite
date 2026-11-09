@@ -22,6 +22,21 @@ final class Recorder<Value>: @unchecked Sendable {
 /// An object whose lifetime a test can watch through a weak reference.
 final class Probe: @unchecked Sendable {}
 
+/// Sends `value` on `emitter` as it is released: what a captured object's `deinit` might do.
+final class SendsOnRelease<Value: Sendable>: @unchecked Sendable {
+    private let emitter: GraniteEmitter<Value>
+    private let value: Value
+
+    init(_ value: Value, on emitter: GraniteEmitter<Value>) {
+        self.emitter = emitter
+        self.value = value
+    }
+
+    deinit {
+        emitter.send(value)
+    }
+}
+
 /// A mutable reference a test's handlers can share.
 final class Holder<Value>: @unchecked Sendable {
     private let lock = NSLock()

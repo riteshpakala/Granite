@@ -74,10 +74,10 @@ public final class GraniteEmitter<Value: Sendable>: Sendable {
     }
     #endif
 
-    @usableFromInline let entries: GraniteLocked<ContiguousArray<Entry>>
+    @usableFromInline let entries: GraniteLock<ContiguousArray<Entry>>
 
     public init() {
-        entries = GraniteLocked([])
+        entries = GraniteLock([])
     }
 
     /// Sends `value` to every live receiver, in subscription order, on this thread.
@@ -114,54 +114,82 @@ public final class GraniteEmitter<Value: Sendable>: Sendable {
             // receiver.
             handler(unsafeDowncast(object, to: Receiver.self), value)
         }
-        let displaced = entries.withLock { list -> [AnyObject & Sendable] in
-            var displaced: [AnyObject & Sendable] = []
-            list.removeAll { existing in
-                guard let current = existing.receiver else { return true }
-                guard let key, existing.key == key else { return false }
-                if current !== receiver {
-                    displaced.append(current)
-                }
-                return true
-            }
-            list.append(entry)
-            return displaced
+        let removal = rewrite(appending: entry) { existing, _ in
+            guard let key else { return false }
+            return existing.key == key
         }
-        Self.notify(displaced)
+        Self.notify(removal.removed.filter { $0 !== receiver })
     }
 
     /// Removes `receiver`'s subscriptions: all of them, or only the one under `key`.
     public func off(_ receiver: AnyObject, key: GraniteEmitterKey? = nil) {
-        entries.withLock { list in
-            list.removeAll { existing in
-                guard let current = existing.receiver else { return true }
-                return current === receiver && (key == nil || existing.key == key)
-            }
+        _ = rewrite { existing, current in
+            current === receiver && (key == nil || existing.key == key)
         }
     }
 
     /// How many subscriptions still have a live receiver.
     public var receiverCount: Int {
-        entries.withLock { list in
-            list.reduce(0) { $0 + ($1.receiver == nil ? 0 : 1) }
-        }
+        // Counted from a snapshot, outside the lock: loading a weak reference can make this
+        // thread the last owner of its object.
+        let snapshot = entries.withLock { $0 }
+        return snapshot.reduce(0) { $0 + ($1.receiver == nil ? 0 : 1) }
     }
 
     /// Removes every subscription, telling the receivers that can be told.
     func removeAll() {
-        let removed = entries.withLock { list -> [AnyObject & Sendable] in
-            let live = list.compactMap(\.receiver)
-            list.removeAll()
-            return live
-        }
-        Self.notify(removed)
+        let removal = rewrite { _, _ in true }
+        Self.notify(removal.removed)
     }
 
     /// Drops the subscriptions whose receivers are gone.
     @usableFromInline
     func compact() {
+        _ = rewrite { _, _ in false }
+    }
+
+    /// What a change to the list took out of it, kept until the lock is released.
+    ///
+    /// Releasing an object runs its `deinit`, and whatever it owned alone goes with it: a
+    /// handler's captures, a receiver's view. If any of that reached this emitter while its lock
+    /// was held, the lock would be taken twice on one thread: a trap on Darwin, a deadlock
+    /// elsewhere. So nothing is released under the lock. The entries taken out, and every
+    /// receiver loaded to decide what to keep, are handed back and go when this does.
+    private struct Removal {
+        var entries: ContiguousArray<Entry> = []
+        var loaded: [AnyObject & Sendable] = []
+        /// The live receivers of the entries taken out.
+        var removed: [AnyObject & Sendable] = []
+    }
+
+    /// Rebuilds the list under the lock: drops the entries whose receiver is gone and those
+    /// `remove` picks, then appends `entry`. `remove` runs under the lock and must not call out.
+    private func rewrite(appending entry: Entry? = nil,
+                         remove: (Entry, AnyObject & Sendable) -> Bool) -> Removal {
         entries.withLock { list in
-            list.removeAll { $0.receiver == nil }
+            var removal = Removal()
+            var kept = ContiguousArray<Entry>()
+            kept.reserveCapacity(list.count + 1)
+            for existing in list {
+                guard let receiver = existing.receiver else {
+                    removal.entries.append(existing)
+                    continue
+                }
+                removal.loaded.append(receiver)
+                if remove(existing, receiver) {
+                    removal.entries.append(existing)
+                    removal.removed.append(receiver)
+                } else {
+                    kept.append(existing)
+                }
+            }
+            if let entry {
+                kept.append(entry)
+            }
+            // Every entry of the old list is now held by `kept` or `removal`, so replacing it
+            // frees only its storage.
+            list = kept
+            return removal
         }
     }
 

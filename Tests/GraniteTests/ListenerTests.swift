@@ -103,6 +103,29 @@ final class ListenerTests: XCTestCase {
         XCTAssertEqual(heard.values, [])
     }
 
+    /// Clearing a set releases its handlers. A handler whose capture broadcasts to the very
+    /// listener being cleared, as it is released, must not find that listener's lock held.
+    func testAHandlerWhoseCaptureSendsAsItIsReleasedIsClearedSafely() {
+        let reducer = GraniteReducerExecutable<Announce>()
+        let broadcast = Announce().broadcast
+        let heard = MainLog<Int>()
+        let listeners = GraniteListeners()
+
+        do {
+            let releases = SendsOnRelease<GranitePayload?>(Announce.Meta(value: 4), on: broadcast)
+            listeners.bind {
+                reducer.listen(.broadcast("release")) { payload in
+                    withExtendedLifetime(releases) {}
+                    heard.append(announced(payload))
+                }
+            }
+        }
+        listeners.clear()
+
+        XCTAssertEqual(heard.values, [], "the listener was already cleared when its capture sent")
+        XCTAssertEqual(listeners.count, 0)
+    }
+
     func testATaskStartedInsideListenersDoesNotKeepTheSetAlive() {
         let reducer = GraniteReducerExecutable<Announce>()
         let broadcast = Announce().broadcast

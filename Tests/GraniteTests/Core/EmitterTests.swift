@@ -158,6 +158,73 @@ final class EmitterTests: XCTestCase {
         XCTAssertEqual(log.count, 1)
     }
 
+    // MARK: Nothing is released under the lock
+
+    /// A handler is released when its subscription goes. If what it captured sends on the same
+    /// emitter as it is released, the emitter's lock must already be free.
+    func testAHandlerReleasedByAReplacedKeyMaySendToItsEmitter() {
+        let emitter = GraniteEmitter<Int>()
+        let log = Recorder<Int>()
+        let first = Probe()
+        let second = Probe()
+        let key = GraniteEmitterKey("slot")
+
+        do {
+            let releases = SendsOnRelease(99, on: emitter)
+            emitter.on(first, key: key) { _, _ in withExtendedLifetime(releases) {} }
+        }
+        emitter.on(second, key: key) { _, value in log.append(value) }
+
+        XCTAssertEqual(log.values, [99], "the send made during the release reached the new subscription")
+    }
+
+    func testAHandlerReleasedByOffMaySendToItsEmitter() {
+        let emitter = GraniteEmitter<Int>()
+        let log = Recorder<Int>()
+        let leaving = Probe()
+        let staying = Probe()
+
+        emitter.on(staying) { _, value in log.append(value) }
+        do {
+            let releases = SendsOnRelease(7, on: emitter)
+            emitter.on(leaving) { _, _ in withExtendedLifetime(releases) {} }
+        }
+        emitter.off(leaving)
+
+        XCTAssertEqual(log.values, [7])
+    }
+
+    func testAHandlerReleasedByRemoveAllMaySendToItsEmitter() {
+        let emitter = GraniteEmitter<Int>()
+        let receiver = Probe()
+
+        do {
+            let releases = SendsOnRelease(1, on: emitter)
+            emitter.on(receiver) { _, _ in withExtendedLifetime(releases) {} }
+        }
+        emitter.removeAll()
+
+        XCTAssertEqual(emitter.receiverCount, 0, "the send found no one, and did not deadlock")
+    }
+
+    func testAHandlerReleasedWhenItsReceiverIsCompactedMaySendToItsEmitter() {
+        let emitter = GraniteEmitter<Int>()
+        let log = Recorder<Int>()
+        let staying = Probe()
+
+        emitter.on(staying) { _, value in log.append(value) }
+        do {
+            let gone = Probe()
+            let releases = SendsOnRelease(5, on: emitter)
+            emitter.on(gone) { _, _ in withExtendedLifetime(releases) {} }
+        }
+        // What `send` does on finding a released receiver. Called directly: inside `send`, the
+        // send's own snapshot may still hold the entry, which would hide the release.
+        emitter.compact()
+
+        XCTAssertEqual(log.values, [5])
+    }
+
     func testConcurrentSendSubscribeAndReleaseStayConsistent() {
         let emitter = GraniteEmitter<Int>()
         let steady = Probe()

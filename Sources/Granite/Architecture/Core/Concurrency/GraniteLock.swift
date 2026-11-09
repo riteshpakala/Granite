@@ -1,5 +1,5 @@
 //
-//  GraniteLocked.swift
+//  GraniteLock.swift
 //  Granite
 //
 //  State that one thread at a time may touch.
@@ -15,7 +15,7 @@ import Glibc
 import Musl
 @usableFromInline typealias GranitePlatformLock = pthread_mutex_t
 #else
-#error("GraniteLocked has no lock primitive for this platform")
+#error("GraniteLock has no lock primitive for this platform")
 #endif
 
 /// State behind a lock, in the shape of `Synchronization.Mutex`.
@@ -27,34 +27,36 @@ import Musl
 /// sound: the state is reachable only inside ``withLock(_:)``, which holds the lock for the whole
 /// of `body`, and `State` is `Sendable`, so whatever moves in or out of the lock may cross threads.
 ///
-/// Never call out to unknown code (handlers, other locks) from inside `body`.
+/// Never call out to unknown code (handlers, other locks) from inside `body`, and never release
+/// an object there either: a release can run a `deinit`, and whatever that object alone owned
+/// goes with it. Hand what you take out of the state back from `body`, and let it go after.
 @usableFromInline
-struct GraniteLocked<State: Sendable>: @unchecked Sendable {
-    @usableFromInline let buffer: GraniteLockedBuffer<State>
+struct GraniteLock<State: Sendable>: @unchecked Sendable {
+    @usableFromInline let buffer: GraniteLockBuffer<State>
 
     @usableFromInline
     init(_ initial: State) {
-        buffer = GraniteLockedBuffer.make(initial)
+        buffer = GraniteLockBuffer.make(initial)
     }
 
     @inlinable
     func withLock<Result>(_ body: (inout State) throws -> Result) rethrows -> Result {
         try buffer.withUnsafeMutablePointers { state, lock in
-            GraniteLockedBuffer<State>.acquire(lock)
-            defer { GraniteLockedBuffer<State>.release(lock) }
+            GraniteLockBuffer<State>.acquire(lock)
+            defer { GraniteLockBuffer<State>.release(lock) }
             return try body(&state.pointee)
         }
     }
 }
 
-/// The allocation behind ``GraniteLocked``: the state as the header, the lock word as the one
+/// The allocation behind ``GraniteLock``: the state as the header, the lock word as the one
 /// element, so the word's address is stable as the platform primitives require.
 @usableFromInline
-final class GraniteLockedBuffer<State>: ManagedBuffer<State, GranitePlatformLock> {
+final class GraniteLockBuffer<State>: ManagedBuffer<State, GranitePlatformLock> {
 
-    static func make(_ initial: State) -> GraniteLockedBuffer<State> {
-        let buffer = GraniteLockedBuffer<State>.create(minimumCapacity: 1) { _ in initial }
-        let storage = unsafeDowncast(buffer, to: GraniteLockedBuffer<State>.self)
+    static func make(_ initial: State) -> GraniteLockBuffer<State> {
+        let buffer = GraniteLockBuffer<State>.create(minimumCapacity: 1) { _ in initial }
+        let storage = unsafeDowncast(buffer, to: GraniteLockBuffer<State>.self)
         storage.withUnsafeMutablePointerToElements { pointer in
             #if canImport(os)
             pointer.initialize(to: os_unfair_lock_s())

@@ -16,10 +16,10 @@ typealias GraniteListenHandler = @MainActor @Sendable (GranitePayload?) -> Void
 /// its only owner. Dropping the set therefore ends the subscription and releases the handler,
 /// along with the view or component it captured.
 final class GraniteListenerBox: GraniteEmitterDisplaceable {
-    private let handler: GraniteLocked<GraniteListenHandler?>
+    private let handler: GraniteLock<GraniteListenHandler?>
 
     init(_ handler: @escaping GraniteListenHandler) {
-        self.handler = GraniteLocked(handler)
+        self.handler = GraniteLock(handler)
     }
 
     /// Called on the sender's thread. Runs the handler on the main actor, inline when the sender
@@ -33,8 +33,17 @@ final class GraniteListenerBox: GraniteEmitterDisplaceable {
     }
 
     /// Releases the handler: another listener took this one's place, or its set was cleared.
+    ///
+    /// The handler is taken out under the lock and released after it, on this thread: what it
+    /// captured may send to an emitter this box listens to as it goes, and that delivery must
+    /// find the lock free and the handler gone.
     func displaced() {
-        handler.withLock { $0 = nil }
+        let released = handler.withLock { handler -> GraniteListenHandler? in
+            let current = handler
+            handler = nil
+            return current
+        }
+        withExtendedLifetime(released) {}
     }
 }
 
@@ -76,7 +85,7 @@ final class GraniteListeners: Sendable {
         }
     }
 
-    private let boxes = GraniteLocked<[Slot: GraniteListenerBox]>([:])
+    private let boxes = GraniteLock<[Slot: GraniteListenerBox]>([:])
 
     init() {}
 

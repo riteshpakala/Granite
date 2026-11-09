@@ -83,7 +83,7 @@ public class GraniteCommand<Center: GraniteCenter>: Inspectable, Findable, Direc
 
     /// Listener sets registered through ``listen(_:_:)``, one per key. Guarded because hosts may
     /// drive appear and disappear off the main thread.
-    private let listenerSets = GraniteLocked<[UUID: GraniteListeners]>([:])
+    private let listenerSets = GraniteLock<[UUID: GraniteListeners]>([:])
 
     public var isOnline: Bool {
         if case .service(.online) = kind {
