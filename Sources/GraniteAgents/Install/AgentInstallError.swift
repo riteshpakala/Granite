@@ -4,6 +4,8 @@ import Foundation
 public enum AgentInstallError: Error, Equatable, CustomStringConvertible {
     case toolchain(String)
     case fetch(source: String, reason: String)
+    /// A store wouldn't hand the code over, or handed over what this machine can't read.
+    case delivery(source: String, reason: String)
     case notAPackage(source: String, reason: String)
     case notGranite(name: String)
     case build(name: String, log: String, path: String)
@@ -15,6 +17,7 @@ public enum AgentInstallError: Error, Equatable, CustomStringConvertible {
         switch self {
         case .toolchain(let reason): return "a Swift toolchain is needed to build an agent: \(reason)"
         case .fetch(let source, let reason): return "could not fetch \(source): \(reason)"
+        case .delivery(let source, let reason): return "could not get \(source): \(reason)"
         case .notAPackage(let source, let reason): return "\(source) is not a Swift package: \(reason)"
         case .notGranite(let name): return "\(name) does not depend on Granite, so it carries no Granite agent"
         case .build(let name, let log, let path): return "\(name) did not build (the whole log is at \(path)):\n\(log)"

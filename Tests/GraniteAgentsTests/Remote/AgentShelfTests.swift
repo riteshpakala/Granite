@@ -79,4 +79,16 @@ final class AgentShelfTests: XCTestCase {
         XCTAssertEqual(AgentSource("https://x/y.git@abc").newest, .git(url: "https://x/y.git", revision: nil))
         XCTAssertEqual(AgentSource("https://x/y.git@abc").description, "https://x/y.git@abc")
     }
+
+    func testADeliveredSourceIsKeptByItsListingAlone() throws {
+        let source = AgentSource.delivered(id: "49a6cf94-76cb-4ce6-a03e-8c1042081655")
+        XCTAssertEqual(source.newest, source, "an update asks the store again")
+        XCTAssertEqual(source.description, "delivered:49a6cf94-76cb-4ce6-a03e-8c1042081655")
+        let json = try JSONEncoder().encode(source)
+        XCTAssertEqual(String(decoding: json, as: UTF8.self), #"{"delivered":"49a6cf94-76cb-4ce6-a03e-8c1042081655"}"#, "no address that expires")
+        XCTAssertEqual(try JSONDecoder().decode(AgentSource.self, from: json), source)
+        XCTAssertEqual(try JSONDecoder().decode(AgentSource.self, from: Data(#"{"url":"https://x/y.git","revision":"abc"}"#.utf8)),
+                       .git(url: "https://x/y.git", revision: "abc"), "an installation from before still reads")
+        XCTAssertEqual(try JSONDecoder().decode(AgentSource.self, from: Data(#"{"path":"/tmp/Agent"}"#.utf8)), .path("/tmp/Agent"))
+    }
 }

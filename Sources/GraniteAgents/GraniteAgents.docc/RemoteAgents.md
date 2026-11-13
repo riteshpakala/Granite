@@ -41,6 +41,20 @@ installed.words   // ["plate"]
 `update(_:)` installs it from its source at its newest. A package whose word another installation carries is
 refused.
 
+### Install what a store delivers
+
+A store's listing is ``AgentSource/delivered(id:)``: the installation keeps only the listing, and every install and
+update asks the host's ``AgentDeliverer`` for an ``AgentDelivery``, an archive at an address that works for a few
+minutes. The installer downloads it, checks its SHA-256 when the store gives one, undoes the transforms it names with
+its ``AgentPayloadDecoder``s (telling the store which it has, so plain source names none), unpacks it inside the
+install's work folder under the store's ``AgentDelivery/directory``, and builds it as from a folder. The source goes
+with the work folder; ``AgentBuildFinishing`` runs on the executable before it is hashed and shelved:
+
+```swift
+let installer = AgentInstaller(folder: agents, deliverer: store)
+try await installer.install(.delivered(id: listing.id))
+```
+
 ### Offer a shelf's agents
 
 ``AgentShelf`` reads the records and offers each agent as a roster entry, without running a runner. A call

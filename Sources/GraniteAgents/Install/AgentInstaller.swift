@@ -4,6 +4,9 @@
 //
 //            fetch → read the manifest → write the runner → build (release) → `agent --describe` → install
 //
+//        A store's listing (`.delivered`) is fetched through the host's `AgentDeliverer` (AgentDelivery.swift): an
+//        archive downloaded, its transforms undone, unpacked inside the work folder, and gone with it after the build.
+//
 //  PIN:  THE RUNNER IS GENERATED, THE PACKAGE IS UNTOUCHED. Any package with a record installs as it is: the runner
 //        depends on every library it makes and on GraniteAgents at the package's own Granite requirement.
 //  PIN:  ONE WORD, ONE INSTALLATION. A package that carries a word another installation carries is refused;
@@ -21,8 +24,22 @@ public struct AgentInstaller: Sendable {
     }
 
     public let shelf: AgentShelf
+    /// Asks a store for a `.delivered` source's code; without one, such a source can't be installed.
+    public let deliverer: (any AgentDeliverer)?
+    /// What undoes the transforms a delivery may name; the store is told these and uses no others.
+    public let decoders: [any AgentPayloadDecoder]
+    /// What runs on each built executable before it is hashed and shelved.
+    public let finishers: [any AgentBuildFinishing]
+    let session: URLSession
 
-    public init(folder: URL) { shelf = AgentShelf(folder: folder) }
+    public init(folder: URL, deliverer: (any AgentDeliverer)? = nil, decoders: [any AgentPayloadDecoder] = [],
+                finishers: [any AgentBuildFinishing] = [], session: URLSession = .shared) {
+        shelf = AgentShelf(folder: folder)
+        self.deliverer = deliverer
+        self.decoders = decoders
+        self.finishers = finishers
+        self.session = session
+    }
 
     /// Installs the package at `source`, replacing an installation of the same name.
     @discardableResult
@@ -54,6 +71,10 @@ public struct AgentInstaller: Sendable {
                 throw AgentInstallError.notAPackage(source: path, reason: "it has no Package.swift")
             }
             revision = try? await Self.head(of: package)
+        case .delivered(let id):
+            let fetched = try await AgentDelivered.fetch(id, deliverer: deliverer, decoders: decoders, session: session, work: work, progress: progress)
+            package = fetched.package
+            revision = fetched.revision
         }
 
         // 2. Read the manifest.
@@ -107,6 +128,7 @@ public struct AgentInstaller: Sendable {
             try manager.copyItem(at: bundle, to: staged.appendingPathComponent(bundle.lastPathComponent))
         }
         let executable = staged.appendingPathComponent("agent")
+        for finisher in finishers { try await finisher.finish(executable, name: read.name) }
         let attributes = try manager.attributesOfItem(atPath: executable.path)
         let installation = AgentInstallation(
             name: read.name, source: source, revision: revision, granite: Self.graniteRevision(runner), sha256: try AgentShelf.sha256(of: executable),
