@@ -383,8 +383,10 @@ A host installs a package as a runner on its shelf:
    remote package by identity, at its commit. A folder dependency is not pinned, so it is not recorded.
 5. **Describe and check.** `agent --describe` gives its entries. A runner with none, or with a word another
    installation carries, is refused.
-6. **Install** `agent` and every resource bundle beside it into `<shelf>/<Name>/`, with `installation.json`,
-   whole or not at all.
+6. **Finish and install.** A host may finish the staged build first: strip or sign `agent`, or put beside it
+   what it needs at run time. Then `agent`, every resource bundle and whatever was put beside it go into
+   `<shelf>/<Name>/` with `installation.json`, whole or not at all. Only `agent` is hashed, and a build that
+   does not finish leaves the installation as it was.
 
 ```json
 {"format": "granite-agent-installation/1", "name": "PlateAgent",

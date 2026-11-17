@@ -59,11 +59,30 @@ update asks the host's ``AgentDeliverer`` for an ``AgentDelivery``, an archive a
 minutes. The installer downloads it, checks its SHA-256 when the store gives one, undoes the transforms it names with
 its ``AgentPayloadDecoder``s (telling the store which it has, so plain source names none), unpacks it inside the
 install's work folder under the store's ``AgentDelivery/directory``, and builds it as from a folder. The source goes
-with the work folder; ``AgentBuildFinishing`` runs on the executable before it is hashed and shelved:
+with the work folder:
 
 ```swift
 let installer = AgentInstaller(folder: agents, deliverer: store)
 try await installer.install(.delivered(id: listing.id))
+```
+
+### Finish a build
+
+An installer's ``AgentBuildFinishing``s run on each build, in order, before its executable is hashed and shelved, under
+the stage `finishing <name>`. Each is handed the ``AgentBuild``: the staged executable, the runner the installer wrote
+and its products, the package's folder, and a line to say. What a finisher puts beside the executable lands on the
+shelf with it; only the executable is hashed, and a finisher that throws leaves the installation as it was:
+
+```swift
+struct BesideTheAgent: AgentBuildFinishing {
+    let library: URL   // a file the app ships, which the agent loads from beside its executable
+    func finish(_ build: AgentBuild) async throws {
+        build.say("placing \(library.lastPathComponent)")
+        try FileManager.default.copyItem(at: library, to: build.staged.appendingPathComponent(library.lastPathComponent))
+    }
+}
+
+let installer = AgentInstaller(folder: agents, finishers: [BesideTheAgent(library: shaders)])
 ```
 
 ### Offer a shelf's agents
@@ -137,3 +156,5 @@ echo '{"perform":{"word":"parrot","input":{"text":"hi"},"model":false}}' | agent
 - ``AgentInstallation``
 - ``AgentInstallError``
 - ``AgentShelf``
+- ``AgentBuildFinishing``
+- ``AgentBuild``

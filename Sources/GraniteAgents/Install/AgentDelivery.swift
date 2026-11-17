@@ -1,6 +1,6 @@
 //  WHAT: A package's code as a store hands it over, and the three places a host plugs into that: who asks the store
-//        (`AgentDeliverer`), what undoes an encoding the code arrived in (`AgentPayloadDecoder`), and what runs on the
-//        built executable before it goes on the shelf (`AgentBuildFinishing`).
+//        (`AgentDeliverer`), what undoes an encoding the code arrived in (`AgentPayloadDecoder`), and what runs on each
+//        build before it goes on the shelf (`AgentBuildFinishing`, handed the build as `AgentBuild`).
 //
 //            store → AgentDelivery (an archive at an address that works for minutes, its transforms)
 //                  → download → decoders, in the delivery's order → unpack → the install as from a folder
@@ -56,7 +56,17 @@ public protocol AgentPayloadDecoder: Sendable {
     func decode(_ file: URL, in work: URL) async throws -> URL
 }
 
-/// Runs on a built executable, staged for the shelf, before its hash is taken: to strip or harden it.
+/// Runs on each build, its executable staged for the shelf, before the executable's hash is taken: to strip, harden
+/// or sign it, or to put beside it what it needs at run time. What it puts in ``AgentBuild/staged`` lands on the
+/// shelf with the executable; a finisher that throws leaves the installation as it was.
 public protocol AgentBuildFinishing: Sendable {
+    /// Finishes one build. The default calls ``finish(_:name:)``, so a finisher of that older form works as it did.
+    func finish(_ build: AgentBuild) async throws
+    /// The older form: the staged executable and the installation's name. The default does nothing.
     func finish(_ executable: URL, name: String) async throws
+}
+
+extension AgentBuildFinishing {
+    public func finish(_ build: AgentBuild) async throws { try await finish(build.executable, name: build.name) }
+    public func finish(_ executable: URL, name: String) async throws {}
 }

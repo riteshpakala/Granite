@@ -2,7 +2,7 @@
 //        whose `main` is `AgentServer.main()`, built, asked what it carries, and installed on a shelf with its
 //        record. Nothing of the package is imported; its records are found in the runner as an app finds them.
 //
-//            fetch → read the manifest → write the runner → build (release) → `agent --describe` → install
+//            fetch → read the manifest → write the runner → build (release) → `agent --describe` → finish → install
 //
 //        A store's listing (`.delivered`) is fetched through the host's `AgentDeliverer` (AgentDelivery.swift): an
 //        archive downloaded, its transforms undone, unpacked inside the work folder, and gone with it after the build.
@@ -34,7 +34,7 @@ public struct AgentInstaller: Sendable {
     public let deliverer: (any AgentDeliverer)?
     /// What undoes the transforms a delivery may name; the store is told these and uses no others.
     public let decoders: [any AgentPayloadDecoder]
-    /// What runs on each built executable before it is hashed and shelved.
+    /// What runs on each build, in order, before its executable is hashed and shelved (``AgentBuild``).
     public let finishers: [any AgentBuildFinishing]
     let session: URLSession
 
@@ -130,30 +130,43 @@ public struct AgentInstaller: Sendable {
             }
         }
 
-        // 6. Install, whole or not at all.
-        progress(.init(stage: "installing \(read.name)"))
+        // 6. Stage, finish and install, whole or not at all: whatever fails, the staged folder goes with it, and a
+        //    finisher runs before the installation it replaces is touched.
         let staged = shelf.folder.appendingPathComponent(".\(read.name).new", isDirectory: true)
         try? manager.removeItem(at: staged)
         try manager.createDirectory(at: staged, withIntermediateDirectories: true)
-        try manager.copyItem(at: built, to: staged.appendingPathComponent("agent"))
-        for bundle in (try? manager.contentsOfDirectory(at: products, includingPropertiesForKeys: nil)) ?? [] where bundle.pathExtension == "bundle" {
-            try manager.copyItem(at: bundle, to: staged.appendingPathComponent(bundle.lastPathComponent))
+        let installation: AgentInstallation
+        do {
+            try manager.copyItem(at: built, to: staged.appendingPathComponent("agent"))
+            for bundle in (try? manager.contentsOfDirectory(at: products, includingPropertiesForKeys: nil)) ?? [] where bundle.pathExtension == "bundle" {
+                try manager.copyItem(at: bundle, to: staged.appendingPathComponent(bundle.lastPathComponent))
+            }
+            let executable = staged.appendingPathComponent("agent")
+            if !finishers.isEmpty {
+                let stage = "finishing \(read.name)"
+                progress(.init(stage: stage))
+                let build = AgentBuild(name: read.name, executable: executable, runner: runner, products: products, package: package,
+                                       say: { line in progress(.init(stage: stage, line: line)) })
+                for finisher in finishers { try await finisher.finish(build) }
+            }
+            progress(.init(stage: "installing \(read.name)"))
+            let attributes = try manager.attributesOfItem(atPath: executable.path)
+            let dependencies = Self.dependencies(runner)
+            installation = AgentInstallation(
+                name: read.name, source: source, revision: revision, granite: dependencies?["granite"], dependencies: dependencies,
+                sha256: try AgentShelf.sha256(of: executable),
+                size: (attributes[.size] as? NSNumber)?.int64Value ?? 0, modified: (attributes[.modificationDate] as? Date)?.timeIntervalSince1970,
+                builtAt: ISO8601DateFormatter().string(from: Date()), entries: entries)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            try encoder.encode(installation).write(to: staged.appendingPathComponent(AgentInstallation.file))
+            let destination = shelf.folder.appendingPathComponent(read.name, isDirectory: true)
+            try? manager.removeItem(at: destination)
+            try manager.moveItem(at: staged, to: destination)
+        } catch {
+            try? manager.removeItem(at: staged)
+            throw error
         }
-        let executable = staged.appendingPathComponent("agent")
-        for finisher in finishers { try await finisher.finish(executable, name: read.name) }
-        let attributes = try manager.attributesOfItem(atPath: executable.path)
-        let dependencies = Self.dependencies(runner)
-        let installation = AgentInstallation(
-            name: read.name, source: source, revision: revision, granite: dependencies?["granite"], dependencies: dependencies,
-            sha256: try AgentShelf.sha256(of: executable),
-            size: (attributes[.size] as? NSNumber)?.int64Value ?? 0, modified: (attributes[.modificationDate] as? Date)?.timeIntervalSince1970,
-            builtAt: ISO8601DateFormatter().string(from: Date()), entries: entries)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        try encoder.encode(installation).write(to: staged.appendingPathComponent(AgentInstallation.file))
-        let destination = shelf.folder.appendingPathComponent(read.name, isDirectory: true)
-        try? manager.removeItem(at: destination)
-        try manager.moveItem(at: staged, to: destination)
         progress(.init(stage: "installed \(read.name): " + entries.map(\.word).joined(separator: ", ")))
         return installation
     }
