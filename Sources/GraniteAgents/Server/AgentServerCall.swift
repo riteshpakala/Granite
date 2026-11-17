@@ -63,7 +63,8 @@ final class AgentServerCall: @unchecked Sendable {
         }
         let model = perform.model ? ChannelHostModel(channel: channel) : nil
         let channel = self.channel
-        let host = AgentHost(directory: perform.directory, ask: perform.ask, model: model, note: { line in try? channel.send(.note(line)) })
+        let host = AgentHost(directory: perform.directory, ask: perform.ask, attachments: perform.attachments ?? [], support: perform.support,
+                             model: model, note: { line in try? channel.send(.note(line)) })
         let input = perform.input.data()
         let task = Task {
             do {

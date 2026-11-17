@@ -15,10 +15,13 @@ final class AgentHostTests: XCTestCase {
     func testAPackageReadsWhatTheHostOffers() async throws {
         let notes = NoteBox()
         let answer = try await call(#"{"directory": "/work"}"#,
-                                    host: AgentHost(directory: "/work", ask: "draw the flow", note: { notes.append($0) }))
+                                    host: AgentHost(directory: "/work", ask: "draw the flow", attachments: ["/captures/beach.png"],
+                                                    support: "/support/Hosted", note: { notes.append($0) }))
         XCTAssertEqual(answer.ask, "draw the flow")
         XCTAssertEqual(answer.hostDirectory, "/work")
         XCTAssertEqual(answer.directory, "/work", "the input's own field is still the input's")
+        XCTAssertEqual(answer.attachments, ["/captures/beach.png"], "the person's file rode the host, not the input")
+        XCTAssertEqual(answer.support, "/support/Hosted", "the folder is the host's to place")
         XCTAssertEqual(notes.lines, ["working"], "the note reached the host")
     }
 
@@ -66,5 +69,16 @@ final class AgentHostTests: XCTestCase {
         XCTAssertEqual(AnyAgentPackage(EchoPackage.self).guide, "", "a package that says nothing has no guide")
         let hosted = try XCTUnwrap(GraniteRoster.discovered().package("hosted"), "the record is in this test binary")
         XCTAssertEqual(hosted.guide, HostedPackage.guide)
+    }
+
+    /// What a package reads of the person's files and what it keeps are its own declarations: one that says nothing
+    /// takes no file and is placed no folder.
+    func testWhatAPackageTakesAndKeepsIsItsOwn() throws {
+        let echo = AnyAgentPackage(EchoPackage.self)
+        XCTAssertEqual(echo.takes, [], "a package that declares nothing is handed no file of the person's")
+        XCTAssertNil(echo.keeps, "and asks for no folder")
+        let hosted = try XCTUnwrap(GraniteRoster.discovered().package("hosted"))
+        XCTAssertEqual(hosted.takes, ["public.image"])
+        XCTAssertEqual(hosted.keeps, HostedPackage.keeps)
     }
 }

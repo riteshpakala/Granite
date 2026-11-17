@@ -21,6 +21,8 @@ struct ParrotPackage: GraniteAgentPackage {
         var directory: String?
         var hostDirectory: String?
         var ask: String?
+        var attachments: [String]?
+        var support: String?
         var pid: Int32
     }
 
@@ -41,6 +43,8 @@ struct ParrotPackage: GraniteAgentPackage {
     static let summary = "says its text back, in a process of its own."
     static let fields = ["text": "what to say"]
     static let guide = "Give it text; it says it back."
+    static let takes = ["public.image"]
+    static let keeps: String? = "the lines it has said"
 
     func run(_ input: Input, context: Context) -> AsyncThrowingStream<Said, Error> {
         AsyncThrowingStream { continuation in
@@ -53,7 +57,8 @@ struct ParrotPackage: GraniteAgentPackage {
                     if input.fault == true { throw Broke() }
                     if let delay = input.delay { try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
                     var said = Said(said: input.text, directory: input.directory, hostDirectory: context.host.directory,
-                                    ask: context.host.ask, pid: getpid())
+                                    ask: context.host.ask, attachments: context.host.attachments.isEmpty ? nil : context.host.attachments,
+                                    support: context.host.support, pid: getpid())
                     if input.askModel == true {
                         said.modelSaid = try await context.host.model(for: Self.word).object(Count.self, system: "Count.", user: "How many?",
                                                                                               maxTokens: 16, seconds: 5).n

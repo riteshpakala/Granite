@@ -40,7 +40,9 @@ public struct AgentProcess: Sendable {
         guard let json = AgentJSON(data: input) else { throw AgentRemoteError.unreadable(word: word, reason: "the input is not JSON") }
         let directory = host.directory.map { URL(fileURLWithPath: $0, isDirectory: true) }
         let child = try AgentChild(executable: executable, arguments: [], directory: directory, environment: environment)
-        let call = AgentWire.Perform(word: word, input: json, directory: host.directory, ask: host.ask, model: host.model != nil)
+        let call = AgentWire.Perform(word: word, input: json, directory: host.directory, ask: host.ask,
+                                     attachments: host.attachments.isEmpty ? nil : host.attachments, support: host.support,
+                                     model: host.model != nil)
         let asks = AskCount()
         let result = await withTaskCancellationHandler {
             await Self.serve(child, word: word, call: call, host: host, asks: asks)

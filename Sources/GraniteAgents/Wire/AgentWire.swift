@@ -61,10 +61,17 @@ public enum AgentWire: Sendable, Equatable {
         public var input: AgentJSON
         public var directory: String?
         public var ask: String?
+        /// The person's files the host hands the call, absolute paths (`AgentHost.attachments`); sent only when there
+        /// are some, so a call without them is the line it always was.
+        public var attachments: [String]?
+        /// The agent's own folder, kept by the host (`AgentHost.support`); sent only when the host offers one.
+        public var support: String?
         /// Whether the host offers its model; an agent that asks without one is told so.
         public var model: Bool
-        public init(word: String, input: AgentJSON, directory: String? = nil, ask: String? = nil, model: Bool = false) {
-            self.word = word; self.input = input; self.directory = directory; self.ask = ask; self.model = model
+        public init(word: String, input: AgentJSON, directory: String? = nil, ask: String? = nil, attachments: [String]? = nil,
+                    support: String? = nil, model: Bool = false) {
+            self.word = word; self.input = input; self.directory = directory; self.ask = ask
+            self.attachments = attachments; self.support = support; self.model = model
         }
     }
 

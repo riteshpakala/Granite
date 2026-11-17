@@ -154,6 +154,10 @@
           "description" : "how to use it well, in its own words",
           "type" : "string"
         },
+        "keeps" : {
+          "description" : "what it keeps between calls, in a sentence a host may show; asks the host for a folder of its own",
+          "type" : "string"
+        },
         "kind" : {
           "enum" : [
             "package",
@@ -189,6 +193,13 @@
         "summary" : {
           "description" : "what it does, in one sentence",
           "type" : "string"
+        },
+        "takes" : {
+          "description" : "what it reads of the person's files, as UTType identifiers; a host hands it no other attachment",
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
         },
         "toolNames" : {
           "items" : {
@@ -389,6 +400,13 @@
               "description" : "what the person asked, in their words",
               "type" : "string"
             },
+            "attachments" : {
+              "description" : "the person's files the host hands the call, absolute paths, only of a type the agent takes",
+              "items" : {
+                "type" : "string"
+              },
+              "type" : "array"
+            },
             "directory" : {
               "type" : "string"
             },
@@ -398,6 +416,10 @@
             "model" : {
               "description" : "whether the host offers its model",
               "type" : "boolean"
+            },
+            "support" : {
+              "description" : "a folder of the agent's own, kept by the host across calls, installs and rebuilds",
+              "type" : "string"
             },
             "word" : {
               "type" : "string"

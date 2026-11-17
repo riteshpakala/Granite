@@ -38,12 +38,17 @@ final class AgentProcessTests: XCTestCase {
         XCTAssertEqual(entries.first?.schema?.fields.map(\.name), ["text", "notes", "askModel", "delay", "crash", "fail", "fault", "directory"],
                        "the schema crossed in its own order")
         XCTAssertEqual(entries.first?.guide, "Give it text; it says it back.")
+        XCTAssertEqual(entries.first?.takes, ["public.image"], "what it reads of the person's files, said without running it")
+        XCTAssertEqual(entries.first?.keeps, "the lines it has said")
     }
 
     func testOneCallInAProcessOfItsOwn() async throws {
         let notes = Notes(), spent = Spent()
         let folder = FileManager.default.temporaryDirectory
-        let host = AgentHost(directory: folder.path, ask: "say it", model: FakeHostModel(answer: #"{"n": 4}"#), note: { notes.add($0) })
+        let picture = folder.appendingPathComponent("beach.png").path
+        let support = folder.appendingPathComponent("agent-support/Parrot").path
+        let host = AgentHost(directory: folder.path, ask: "say it", attachments: [picture], support: support,
+                             model: FakeHostModel(answer: #"{"n": 4}"#), note: { notes.add($0) })
         let output = try await AgentProcess(executable: Self.runner).perform(
             word: "parrot", input: Data(#"{"text": "hi", "notes": 2, "askModel": true}"#.utf8), host: host, cost: { spent.set($0) })
         let answer = try said(output)
@@ -51,6 +56,8 @@ final class AgentProcessTests: XCTestCase {
         XCTAssertEqual(answer["modelSaid"] as? Int, 4, "the runner asked this host's model across the pipe")
         XCTAssertEqual(answer["ask"] as? String, "say it")
         XCTAssertEqual(answer["hostDirectory"] as? String, folder.path)
+        XCTAssertEqual(answer["attachments"] as? [String], [picture], "the person's file crossed the wire beside the input")
+        XCTAssertEqual(answer["support"] as? String, support, "and the folder of its own")
         let pid = try XCTUnwrap(answer["pid"] as? Int)
         XCTAssertNotEqual(Int32(pid), getpid(), "it ran in a process of its own")
         XCTAssertEqual(kill(pid_t(pid), 0), -1, "and the process is gone")

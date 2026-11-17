@@ -23,6 +23,12 @@ public struct AnyAgentPackage: Sendable {
     public let guide: String
     /// What it makes, and where (`GraniteAgentPackage.makes`).
     public let makes: [AgentMake]
+    /// What it reads of the person's files, as UTType identifiers (`GraniteAgentPackage.takes`): a host hands a call
+    /// only the attachments whose type conforms to one.
+    public let takes: [String]
+    /// What it keeps between calls, in its own sentence (`GraniteAgentPackage.keeps`): a host that says one places a
+    /// folder for it and offers it as `AgentHost.support`.
+    public let keeps: String?
     private let call: @Sendable (Data, AgentHost) async throws -> Data
 
     public init<P: GraniteAgentPackage>(_ package: P.Type) {
@@ -35,13 +41,15 @@ public struct AnyAgentPackage: Sendable {
         lanes = P.lanes
         guide = P.guide
         makes = P.makes
+        takes = P.takes
+        keeps = P.keeps
         call = { data, host in try await Self.perform(P.self, data, host: host) }
     }
 
     /// A package described rather than linked: what an entry says of it (`AgentWire.Entry`), and a call that runs
     /// wherever the package lives. `RemoteAgent` makes one whose call runs a process of its own.
     public init(word: String, summary: String, module: String, type: String, schema: GraniteSchema, fields: [String: String],
-                lanes: Int?, guide: String, makes: [AgentMake] = [],
+                lanes: Int?, guide: String, makes: [AgentMake] = [], takes: [String] = [], keeps: String? = nil,
                 perform: @escaping @Sendable (Data, AgentHost) async throws -> Data) {
         self.word = word
         self.summary = summary
@@ -52,6 +60,8 @@ public struct AnyAgentPackage: Sendable {
         self.lanes = lanes
         self.guide = guide
         self.makes = makes
+        self.takes = takes
+        self.keeps = keeps
         call = perform
     }
 

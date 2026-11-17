@@ -100,8 +100,22 @@ reads it as `context.host`.
 - `directory`: the folder the app works in (the same folder an `Input`'s `directory` field is filled with).
 - `ask`: what the person asked, in their words. It is not a field of the input: a model writes the call, it
   never writes the person's request, so the ask rides the host and never lands in a tool call's JSON.
+- `attachments`: the files the person attached, absolute paths, handed only to a package that declares their
+  type in `takes` (`["public.image"]`). A call whose input names no file reads the one it means from here; like
+  the ask, the files ride the host and never a tool call's JSON.
+- `support`: a folder of the package's own that the app keeps across calls, installs and rebuilds, offered when
+  the package says what it keeps (`keeps`). Keep files there and nowhere else under `~`: where it is, is the app's.
 - `note(_:)`: a line of progress the app shows where it shows its agents' work.
 - `model`: the model the app has loaded, as an ``AgentHostModel``: a JSON object that fits a schema, or text.
+
+```swift
+public static let takes = ["public.image"]                                      // the person's pictures reach the run
+public static let keeps: String? = "the signatures of the images you watermark"  // the app places a folder for it
+
+// in the run
+let picture = input.path ?? context.host.attachments.first
+let records = context.host.support.map { URL(fileURLWithPath: $0).appendingPathComponent("signatures") }
+```
 
 ```swift
 public func run(_ input: Input, context: Context) -> AsyncThrowingStream<PlateFrame, Error> {
@@ -205,6 +219,8 @@ The app makes it one of its worker kinds; what a worker is, past these words, is
 - `Input` is `Codable`; optional fields are optional; enums list their cases.
 - Compute is made in `compute()`, on the first call; the run touches no state.
 - What the app offers is read through `context.host`; a run that needs the model asks `model(for:)`.
+- What it reads of the person's files is declared in `takes`; what it keeps between calls in `keeps`, and kept
+  under `context.host.support` only.
 - `guide` says how to use it well, when there is more to say than `summary`.
 - The record is two lines, and a test finds it with ``GraniteRoster/discovered()``.
 - The app links the package from a target, imports it nowhere, and runs it by its word.

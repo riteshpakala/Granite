@@ -2,7 +2,8 @@ import Foundation
 import GraniteAgents
 
 /// A package agent with a record in this test binary that says back what its host offered: the ask, the
-/// folder, what the host's model answered when asked, and what a child it spawned heard.
+/// folder, the files and the folder of its own the host handed it, what the host's model answered when asked, and
+/// what a child it spawned heard.
 struct HostedPackage: GraniteAgentPackage {
     struct Input: Codable, Sendable {
         var needsModel: Bool?
@@ -16,6 +17,8 @@ struct HostedPackage: GraniteAgentPackage {
         var hostDirectory: String?
         var modelSaid: Int?
         var childAsk: String?
+        var attachments: [String]?
+        var support: String?
     }
 
     /// What the host's model is asked for.
@@ -28,13 +31,17 @@ struct HostedPackage: GraniteAgentPackage {
     static let word = "hosted"
     static let summary = "says back what its host offered it."
     static let guide = "Ask it what the host offered; it says it back, and asks the model when told to."
+    static let takes = ["public.image"]
+    static let keeps: String? = "nothing it needs, only to show that a host places a folder for it"
 
     func run(_ input: Input, context: Context) -> AsyncThrowingStream<Answer, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     context.host.note("working")
-                    var answer = Answer(ask: context.host.ask, directory: input.directory, hostDirectory: context.host.directory)
+                    var answer = Answer(ask: context.host.ask, directory: input.directory, hostDirectory: context.host.directory,
+                                        attachments: context.host.attachments.isEmpty ? nil : context.host.attachments,
+                                        support: context.host.support)
                     if input.needsModel == true {
                         let model = try context.host.model(for: Self.word)
                         answer.modelSaid = try await model.object(Count.self, system: "Count.", user: "How many?", maxTokens: 16, seconds: 5).n

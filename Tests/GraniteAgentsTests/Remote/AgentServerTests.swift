@@ -40,7 +40,8 @@ final class AgentServerTests: XCTestCase {
     }
 
     func testTheHostsModelIsAskedAcrossTheChannel() async {
-        let (exit, heard) = await call(.init(word: "hosted", input: .object(["needsModel": .bool(true)]), directory: "/p", ask: "count", model: true),
+        let (exit, heard) = await call(.init(word: "hosted", input: .object(["needsModel": .bool(true)]), directory: "/p", ask: "count",
+                                             attachments: ["/c/beach.png"], support: "/s/Hosted", model: true),
                                        answering: { ask in .init(id: ask.id, object: .object(["n": .integer(7)])) })
         XCTAssertEqual(exit, .answered)
         XCTAssertTrue(heard.contains(.note("working")), "the run's note crossed")
@@ -53,6 +54,8 @@ final class AgentServerTests: XCTestCase {
         XCTAssertEqual(answer.modelSaid, 7)
         XCTAssertEqual(answer.ask, "count")
         XCTAssertEqual(answer.hostDirectory, "/p")
+        XCTAssertEqual(answer.attachments, ["/c/beach.png"], "the files crossed beside the input")
+        XCTAssertEqual(answer.support, "/s/Hosted")
     }
 
     func testAHostWithoutAModelIsSaidSo() async {

@@ -44,6 +44,9 @@ public enum AgentSchemaJSON {
             "lanes": described(["type": "integer", "minimum": 1], "how many calls run at once"),
             "guide": described(string, "how to use it well, in its own words"),
             "makes": described(["type": "array", "items": ["$ref": "#/$defs/make"]], "what it makes, each kind with where it lands"),
+            "takes": described(["type": "array", "items": string],
+                               "what it reads of the person's files, as UTType identifiers; a host hands it no other attachment"),
+            "keeps": described(string, "what it keeps between calls, in a sentence a host may show; asks the host for a folder of its own"),
             "toolNames": ["type": "array", "items": string],
             "budget": ["type": "string", "enum": WorkerBudget.allCases.map(\.rawValue)],
             "shell": ["type": "boolean"],
@@ -121,6 +124,9 @@ public enum AgentSchemaJSON {
             "type": "object", "required": ["word", "input", "model"],
             "properties": ["word": string, "input": described([String: Any](), "the call's input, as its schema says"),
                            "directory": string, "ask": described(string, "what the person asked, in their words"),
+                           "attachments": described(["type": "array", "items": string],
+                                                    "the person's files the host hands the call, absolute paths, only of a type the agent takes"),
+                           "support": described(string, "a folder of the agent's own, kept by the host across calls, installs and rebuilds"),
                            "model": described(["type": "boolean"], "whether the host offers its model")],
         ]
         let hello: [String: Any] = [

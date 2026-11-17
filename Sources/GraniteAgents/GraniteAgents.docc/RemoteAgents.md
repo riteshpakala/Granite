@@ -93,6 +93,8 @@ echo '{"perform":{"word":"parrot","input":{"text":"hi"},"model":false}}' | agent
 
 - The package has its record, and nothing it prints is meant for a host: notes go through `context.host.note`.
 - A host fills `directory`, offers its model when it has one, and ends a process that does not answer.
+- A host hands a call only the attachments its agent `takes`, and places a support folder for an agent that
+  `keeps` something; both cross the wire in `perform`, and only when offered.
 - A host checks the digest before every launch, and installs again rather than running a changed executable.
 
 ## Topics
