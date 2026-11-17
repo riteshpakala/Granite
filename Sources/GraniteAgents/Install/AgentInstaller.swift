@@ -50,12 +50,13 @@ public struct AgentInstaller: Sendable {
     /// Installs the package at `source`, replacing an installation of the same name.
     @discardableResult
     public func install(_ source: AgentSource, progress: @escaping @Sendable (Progress) -> Void = { _ in }) async throws -> AgentInstallation {
-        try await install(source, checkout: nil, progress: progress)
+        try await install(source, checkout: nil, done: "installed", progress: progress)
     }
 
     /// The one install. `checkout`, when given, is what a repository is checked out at in place of the revision its
     /// source asks for; the record keeps `source` as it is either way.
-    private func install(_ source: AgentSource, checkout: String?, progress: @escaping @Sendable (Progress) -> Void) async throws -> AgentInstallation {
+    private func install(_ source: AgentSource, checkout: String?, done: String,
+                         progress: @escaping @Sendable (Progress) -> Void) async throws -> AgentInstallation {
         let manager = FileManager.default
         let work = shelf.folder.appendingPathComponent(".builds", isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
         try manager.createDirectory(at: work, withIntermediateDirectories: true)
@@ -167,7 +168,7 @@ public struct AgentInstaller: Sendable {
             try? manager.removeItem(at: staged)
             throw error
         }
-        progress(.init(stage: "installed \(read.name): " + entries.map(\.word).joined(separator: ", ")))
+        progress(.init(stage: "\(done) \(read.name): " + entries.map(\.word).joined(separator: ", ")))
         return installation
     }
 
@@ -184,7 +185,7 @@ public struct AgentInstaller: Sendable {
     @discardableResult
     public func rebuild(_ name: String, progress: @escaping @Sendable (Progress) -> Void = { _ in }) async throws -> AgentInstallation {
         guard let installed = shelf.installation(name) else { throw AgentInstallError.notInstalled(name) }
-        return try await install(installed.source, checkout: Self.pin(installed), progress: progress)
+        return try await install(installed.source, checkout: Self.pin(installed), done: "rebuilt", progress: progress)
     }
 
     /// Removes the installation called `name`, or carrying the agent `name`.

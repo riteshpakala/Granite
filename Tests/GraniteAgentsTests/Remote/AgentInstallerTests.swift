@@ -75,7 +75,9 @@ final class AgentInstallerTests: XCTestCase {
             XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent(".HelloAgent.new").path), "and nothing staged")
         }
 
-        let rebuilt = try await installer.rebuild("hello")
+        let again = Lines()
+        let rebuilt = try await installer.rebuild("hello") { again.add($0.stage) }
+        XCTAssertEqual(again.all.last, "rebuilt HelloAgent: hello", "a rebuild says so to the end: \(again.all)")
         XCTAssertEqual(installer.shelf.installations().map(\.name), ["HelloAgent"], "rebuilding installs again, and replaces it whole")
         XCTAssertEqual(installer.shelf.installation("hello"), rebuilt)
         XCTAssertEqual(rebuilt.source, installed.source, "the record keeps its source")
