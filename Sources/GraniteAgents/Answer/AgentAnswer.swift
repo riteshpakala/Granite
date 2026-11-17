@@ -1,7 +1,8 @@
 //  WHAT: What a package call answers, as every host reads it: `granite-answer/1`. The files it wrote, what it made
-//        of what its call asked for, what it could only do in part, and the files whose own standard a host reads
-//        (a `craft-timeseries/1` series): reserved keys at the top of the one JSON object a call answers, beside the
-//        package's own, which a host passes on without reading.
+//        of what its call asked for, what it could only do in part, the files whose own standard a host reads
+//        (a `craft-timeseries/1` series), and what it asks a client to do with what it made (`preview`): reserved
+//        keys at the top of the one JSON object a call answers, beside the package's own, which a host passes on
+//        without reading.
 //  PIN:  OPT-IN, THEN THE RULE. An `Output` that conforms is checked and stamped by the runner (`AnyAgentPackage`);
 //        one that does not answers as it always did. Once every agent conforms, `Output: AgentAnswer` is the
 //        requirement, so an install from an older agent never stops building in between.
@@ -26,6 +27,9 @@ public protocol AgentAnswer: Codable, Sendable {
     var problems: [AgentProblem] { get }
     /// Files among `paths` that follow a standard of their own, named by the `schema` key inside each.
     var payloads: [AgentPayload] { get }
+    /// What it asks a client to do with what it made, in words any client reads (`.preview([lead, …], title:)`): a
+    /// client performs the interactions it has and ignores the rest. Each names files among `paths`.
+    var interactions: [AgentInteraction] { get }
 }
 
 extension AgentAnswer {
@@ -34,4 +38,5 @@ extension AgentAnswer {
     public var expected: [AgentExpected] { [] }
     public var problems: [AgentProblem] { [] }
     public var payloads: [AgentPayload] { [] }
+    public var interactions: [AgentInteraction] { [] }
 }

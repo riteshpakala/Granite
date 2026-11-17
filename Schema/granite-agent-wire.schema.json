@@ -36,6 +36,13 @@
         "format" : {
           "const" : "granite-answer/1"
         },
+        "interactions" : {
+          "description" : "what it asks a client to do with what it made; a client performs the interactions it has and ignores the rest",
+          "items" : {
+            "$ref" : "#/$defs/interaction"
+          },
+          "type" : "array"
+        },
         "made" : {
           "items" : {
             "properties" : {
@@ -242,6 +249,32 @@
         "name",
         "schema",
         "required"
+      ],
+      "type" : "object"
+    },
+    "interaction" : {
+      "properties" : {
+        "kind" : {
+          "description" : "what is asked: preview (show these files, the first in front); a client ignores a kind it does not know",
+          "pattern" : "^[a-z][a-z0-9-]*$",
+          "type" : "string"
+        },
+        "paths" : {
+          "description" : "the files it is about, lead first, each one of the answer's paths",
+          "items" : {
+            "type" : "string"
+          },
+          "minItems" : 1,
+          "type" : "array"
+        },
+        "title" : {
+          "description" : "a caption a client may show",
+          "type" : "string"
+        }
+      },
+      "required" : [
+        "kind",
+        "paths"
       ],
       "type" : "object"
     },

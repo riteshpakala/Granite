@@ -4,7 +4,7 @@ import Foundation
 public enum AgentAnswerStandard {
     public static let format = "granite-answer/1"
     /// The keys a host reads; every other key is the package's own.
-    public static let reserved = ["format", "agent", "path", "paths", "notes", "made", "expected", "problems", "payloads"]
+    public static let reserved = ["format", "agent", "path", "paths", "notes", "made", "expected", "problems", "payloads", "interactions"]
     /// The keys only the runner writes.
     public static let stamped = ["format", "agent"]
 }

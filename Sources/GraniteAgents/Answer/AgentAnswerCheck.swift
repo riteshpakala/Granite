@@ -1,6 +1,9 @@
 //  WHAT: An answer held to `granite-answer/1` before it leaves the process: every reserved key in its shape, every
 //        file it names among its `paths`, every kind it made or expected one its package declares, every payload a
-//        file whose own `schema` says what the answer says. Then stamped with the standard and the agent's word.
+//        file whose own `schema` says what the answer says, every interaction about files it wrote that are on disk.
+//        Then stamped with the standard and the agent's word.
+//  PIN:  THE CHECK DOES NOT POLICE THE VOCABULARY. An interaction's `kind` must be one lowercase word, not a word the
+//        standard lists: a client ignores a kind it does not know, so a package may say one before clients do.
 //  PIN:  PATHS COMPARED AS FILES. Each path is read against the host's folder (a relative one) and standardized on
 //        both sides, so an answer that says `paths` relative and `made` absolute is not refused for it.
 
@@ -69,6 +72,36 @@ public enum AgentAnswerCheck {
             }
             let said = string(payload["schema"])
             return said == schema ? [] : ["`payloads[\(index)]` says `\(schema)`, and the file's own `schema` is " + (said.map { "`\($0)`" } ?? "missing")]
+        }
+        problems += list(answer["interactions"], "interactions") { item, index in
+            guard let kind = string(item["kind"]), case .array(let listed)? = item["paths"] else {
+                return ["`interactions[\(index)]` needs a `kind` and `paths`"]
+            }
+            var said: [String] = []
+            if kind.range(of: #"^[a-z][a-z0-9-]*$"#, options: .regularExpression) == nil {
+                said.append("`interactions[\(index)].kind` is one lowercase word")
+            }
+            if listed.isEmpty { said.append("`interactions[\(index)]` names no file: its `paths` lists the files it is about, lead first") }
+            var seen: Set<String> = []
+            for entry in listed {
+                guard case .string(let path) = entry else {
+                    said.append("`interactions[\(index)].paths` holds something that is not a path")
+                    continue
+                }
+                let file = resolved(path, under: directory)
+                if !seen.insert(file).inserted {
+                    said.append("`interactions[\(index)]` names \(path) twice")
+                } else if !paths.contains(file) {
+                    said.append("`interactions[\(index)]` is about \(path), which is not one of `paths`")
+                } else if !FileManager.default.fileExists(atPath: file) {
+                    said.append("`interactions[\(index)]` is about \(path), which is not on disk")
+                }
+            }
+            switch item["title"] {
+            case nil, .null?, .string?: break
+            default: said.append("`interactions[\(index)].title` is a caption: a string")
+            }
+            return said
         }
         switch answer["notes"] {
         case nil: break

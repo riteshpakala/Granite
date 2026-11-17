@@ -92,6 +92,25 @@ not, and an enum of `String` raw values that lists its cases is a choice of thos
 
 An output that wrote files says where in `path` or `paths`, so a host can tell what changed.
 
+### Ask the app to show what it made
+
+An ``AgentAnswer`` can say what it would like the person to do with the files it wrote, in words any app reads:
+``AgentInteraction``s. `preview` asks an app to show them, the first in front. An app performs the interactions
+it has a compatible way to perform and ignores the rest, so the answer never names an app's UI, and an app with
+none still has the files in `paths`:
+
+```swift
+struct MarkResult: AgentAnswer {
+    var paths: [String]
+    var interactions: [AgentInteraction]
+}
+
+MarkResult(paths: [marked, digest], interactions: [.preview([marked, digest], title: "Watermarked")])
+```
+
+The runner holds each interaction to the answer: its files must be among `paths` and on disk, and its `kind` one
+lowercase word; a kind no app performs yet still passes, because an app ignores what it does not know.
+
 ### What the host offers
 
 A call is JSON, and a run gets more than its JSON: an app passes an ``AgentHost`` with the call, and the run
@@ -221,6 +240,8 @@ The app makes it one of its worker kinds; what a worker is, past these words, is
 - What the app offers is read through `context.host`; a run that needs the model asks `model(for:)`.
 - What it reads of the person's files is declared in `takes`; what it keeps between calls in `keeps`, and kept
   under `context.host.support` only.
+- What the person should do with what it made is an ``AgentInteraction`` in its answer (`preview`), never an
+  app's UI by name.
 - `guide` says how to use it well, when there is more to say than `summary`.
 - The record is two lines, and a test finds it with ``GraniteRoster/discovered()``.
 - The app links the package from a target, imports it nowhere, and runs it by its word.

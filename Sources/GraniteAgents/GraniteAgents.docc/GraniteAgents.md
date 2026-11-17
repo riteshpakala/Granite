@@ -75,6 +75,7 @@ its own, one call each: <doc:RemoteAgents>. The standard both follow is `Schema/
 - ``AgentExpected``
 - ``AgentProblem``
 - ``AgentPayload``
+- ``AgentInteraction``
 - ``AgentAnswerCheck``
 - ``AgentRefusal``
 - ``AgentRefusing``

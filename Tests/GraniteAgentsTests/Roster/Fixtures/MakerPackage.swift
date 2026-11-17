@@ -6,7 +6,7 @@ import GraniteAgents
 struct MakerPackage: GraniteAgentPackage {
     struct Input: Codable, Sendable {
         var name: String
-        /// `good`, `path`, `kind`, `payload`, `stamp`, `refuse`.
+        /// `good`, `path`, `kind`, `payload`, `stamp`, `refuse`, `preview`, `previewStray`, `unknownKind`.
         var mode: String?
         var directory: String?
     }
@@ -20,6 +20,7 @@ struct MakerPackage: GraniteAgentPackage {
         var notes: [String]
         var format: String?
         var card: String
+        var interactions: [AgentInteraction] = []
     }
 
     typealias Event = Answer
@@ -47,6 +48,9 @@ struct MakerPackage: GraniteAgentPackage {
                                     payloads: [AgentPayload(path: relative, schema: "test-card/1")], notes: ["one card"], card: input.name)
                 if mode == "path" { answer.path = "cards/elsewhere.card.json" }
                 if mode == "stamp" { answer.format = "made-up/9" }
+                if mode == "preview" { answer.interactions = [.preview([relative], title: "the card of \(input.name)")] }
+                if mode == "previewStray" { answer.interactions = [.preview([relative, "cards/stray.card.json"])] }
+                if mode == "unknownKind" { answer.interactions = [AgentInteraction(kind: "hologram", paths: [relative])] }
                 continuation.yield(answer)
                 continuation.finish()
             } catch {

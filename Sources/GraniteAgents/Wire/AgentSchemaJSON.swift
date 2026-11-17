@@ -95,11 +95,24 @@ public enum AgentSchemaJSON {
             "payloads": described(["type": "array", "items": ["type": "object", "required": ["path", "schema"],
                                                               "properties": ["path": string, "schema": described(string, "the id the file's own schema key says")]]],
                                   "files among paths that follow a standard of their own"),
+            "interactions": described(["type": "array", "items": ["$ref": "#/$defs/interaction"]],
+                                      "what it asks a client to do with what it made; a client performs the interactions it has and ignores the rest"),
+        ],
+    ]
+
+    nonisolated(unsafe) static let interaction: [String: Any] = [
+        "type": "object", "required": ["kind", "paths"],
+        "properties": [
+            "kind": described(["type": "string", "pattern": "^[a-z][a-z0-9-]*$"],
+                              "what is asked: preview (show these files, the first in front); a client ignores a kind it does not know"),
+            "paths": described(["type": "array", "minItems": 1, "items": string], "the files it is about, lead first, each one of the answer's paths"),
+            "title": described(string, "a caption a client may show"),
         ],
     ]
 
     static var definitions: [String: Any] {
-        ["schema": schemaForm, "field": field, "entry": entryObject, "make": make, "refusal": refusal, "answer": answerObject]
+        ["schema": schemaForm, "field": field, "entry": entryObject, "make": make, "refusal": refusal, "answer": answerObject,
+         "interaction": interaction]
     }
 
     /// One agent, described: what `--describe` prints and an installation keeps.

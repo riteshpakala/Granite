@@ -153,6 +153,7 @@ host passes on without reading.
           {"kind": "conformance", "name": "Post", "path": "/p/Shared/Views/Social/Conformances/Post+Post.swift", "state": "rewritten"}],
  "problems": [{"kind": "skipped", "text": "edited=nil left out: a property a line leaves out shows its default"}],
  "notes": ["`Post` is declared in MarginKit, so the conformances import it."],
+ "interactions": [{"kind": "preview", "paths": ["/p/Shared/Views/Social/FeedView.swift"], "title": "FeedView"}],
  "views": ["FeedView"], "schema": "AppSocial"}
 ```
 
@@ -167,21 +168,44 @@ host passes on without reading.
 | `expected` | the package | what its call asked for, as it read the call: `kind`, `name`, the measure `made` is held to |
 | `problems` | the package | what it could only do in part (a fallback, a model that said nothing): `kind`, `text`; not a refusal |
 | `payloads` | the package | files among `paths` that follow a standard of their own: `path`, and `schema`, the id the file's own `schema` key says (`craft-timeseries/1`) |
+| `interactions` | the package | what it asks a client to do with what it made (§4.3): `kind` (`preview`), `paths` (the files it is about, lead first, each one of `paths`), `title`; a client performs the interactions it has and ignores the rest |
 
 A runner checks every conforming answer before it is sent (`AgentAnswerCheck`), and refuses it as kind `answer`
-(§4.3) when:
+(§4.4) when:
 
 - `format` or `agent` is in it (they are the runner's to write);
 - `paths` is missing, or `path` is not one of `paths`;
 - a `made` or `expected` kind is not one the package declares in `makes`, or a `made` item lacks its `kind` or
   `name`, or a written or rewritten one names no `path` among `paths`;
 - a payload is not among `paths`, is not a JSON object on disk, or its own `schema` is not the one named;
+- an interaction's `kind` is not one lowercase word, or its `paths` is empty, names a file twice, or names one
+  that is not among `paths` or not on disk;
 - `problems` or `notes` is not a list of its shape.
 
 Paths are compared as files: each read against `directory` when relative and standardized. The key a host reads
 for measure is `made` against `expected`: what the agent was told, and what it made of it.
 
-### 4.3 Refusals
+### 4.3 Interactions
+
+An answer's `interactions` say what the agent would like the person to do with what it made, in words any client
+reads. An agent never names a client's UI. A client performs each interaction it has a compatible way to perform,
+and ignores the rest: the files are in `paths` either way, so a client with none loses nothing.
+
+| Kind | What a client is asked |
+| --- | --- |
+| `preview` | show these files to the person, the first in front |
+
+- `kind` is one lowercase word. A client must not fail on a kind it does not know, and the runner's check does
+  not hold a kind to this table, so an agent may say a kind before clients perform it.
+- `paths` are the files it is about, lead first. Each must be one of the answer's `paths`, on disk.
+- `title` is a caption a client may show beside them.
+- A kind is added to this table when a client needs one, as a minor change (§11).
+
+```swift
+var interactions: [AgentInteraction] { [.preview(["veil/beach.marked.png", "veil/beach.digest.png"], title: "Watermarked")] }
+```
+
+### 4.4 Refusals
 
 Every way a call is not answered is one shape, `AgentRefusal`: a `kind` and `reasons`, one sentence each with its
 fix in it. A package throws one, or an error of its own type that is `AgentRefusing`:
@@ -281,7 +305,7 @@ itself by its one key. The runner writes to its stdout and reads its stdin. Its 
 | `model` | runner | any time | `id`, `kind` (`object` or `text`), `schema`, `system`, `user`, `maxTokens`, `seconds` |
 | `answer` | host | after a `model` | `id`, and exactly one of `object`, `text` or `error` |
 | `output` | runner | last | the call's answer (§4.2), or a package's own JSON |
-| `failed` | runner | last | a sentence: why the call failed; beside it, `refused` (§4.3) when it was refused |
+| `failed` | runner | last | a sentence: why the call failed; beside it, `refused` (§4.4) when it was refused |
 | `cancel` | host | any time | `{}`: end the call |
 | `entries` | runner | with `--describe` only | the entries it carries (§7) |
 
@@ -378,7 +402,8 @@ A host installs a package as a runner on its shelf:
   `granite-agent/1`. `makes`, `hello.answer`, `refused`, the answer's reserved keys, `takes`, `keeps`, and
   `perform`'s `attachments` and `support` came so.
 - **The answer.** `granite-answer/<major>` names the answer (§4.2) apart from the wire: a new reserved key is
-  minor. Conforming is opt-in until every agent of a shelf conforms; then `Output: AgentAnswer` is required,
+  minor, and so is a new interaction kind (§4.3); `interactions` came so, and the answer stayed
+  `granite-answer/1`. Conforming is opt-in until every agent of a shelf conforms; then `Output: AgentAnswer` is required,
   in a release of its own, so no install of an older agent stops building in between.
 - **A breaking change** takes the next major. A host must refuse a runner whose `hello` names a major it does
   not speak, with a sentence.
@@ -394,6 +419,8 @@ A host installs a package as a runner on its shelf:
 - [ ] A field a call may leave out is optional; choices are `CaseIterable` `String` enums; `directory` is the
       host's.
 - [ ] Files written are named in `path` or `paths`.
+- [ ] What it would like the person to do with what it made is said in `interactions` (`preview`), never as a
+      client's UI by name.
 - [ ] `makes` says each kind it makes and where; its `Output` is an `AgentAnswer` that says `made` against
       `expected`, and its errors are `AgentRefusal`s or `AgentRefusing`.
 - [ ] Compute is made in `compute()`; the model is asked through `context.host.model(for:)`.
@@ -413,5 +440,7 @@ A host installs a package as a runner on its shelf:
       does not answer.
 - [ ] It reaps each process, and reports what it took, its asks counted.
 - [ ] It reads a refusal by its kind, and a fault as a fault.
+- [ ] It performs the interactions it has a compatible way to perform, and ignores the rest, a kind it does not
+      know included.
 - [ ] It installs from source (§10), refuses clashing words, and checks the digest before every launch.
 - [ ] It offers a shelf from its records, and reads it again when they change.

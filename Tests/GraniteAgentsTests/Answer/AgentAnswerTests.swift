@@ -39,6 +39,7 @@ final class AgentAnswerTests: XCTestCase {
             ("kind", "`made[0]` is a `chart`, and maker makes `card`"),
             ("payload", "`payloads[0]` says `test-card/1`, and the file's own `schema` is `other-card/1`"),
             ("stamp", "`format` is the runner's to say: an answer does not encode it"),
+            ("previewStray", "`interactions[0]` is about cards/stray.card.json, which is not one of `paths`"),
         ]
         for row in rows {
             do {
@@ -51,6 +52,48 @@ final class AgentAnswerTests: XCTestCase {
                 XCTAssertTrue(said.hasPrefix("maker's answer breaks granite-answer/1"), said)
             }
         }
+    }
+
+    /// An answer asks a client to show what it made in words any client reads; the check holds its files to `paths`
+    /// and to the disk, and leaves the vocabulary open.
+    func testAnInteractionIsCheckedAndPassedOn() async throws {
+        let previewed = try await call("preview")
+        XCTAssertEqual(previewed["format"], .string(AgentAnswerStandard.format), "stamped")
+        XCTAssertEqual(previewed["interactions"], .array([.object(["kind": .string("preview"), "paths": .array([.string("cards/ada.card.json")]),
+                                                                   "title": .string("the card of ada")])]))
+        let unknown = try await call("unknownKind")
+        guard case .array(let asked)? = unknown["interactions"], case .object(let first)? = asked.first else { return XCTFail("\(unknown)") }
+        XCTAssertEqual(first["kind"], .string("hologram"), "a kind no client knows yet still passes: a client ignores it")
+        XCTAssertEqual(AgentInteraction.preview(["a.png"]), AgentInteraction(kind: AgentInteraction.previewKind, paths: ["a.png"]))
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(AgentInteraction.preview(["a.png"])), as: UTF8.self).contains("title"),
+                       "a caption left out is not said")
+    }
+
+    func testEachWayAnInteractionBreaksTheStandard() throws {
+        let written = folder.appendingPathComponent("cards/a.png")
+        try FileManager.default.createDirectory(at: written.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([0]).write(to: written)
+        func interactions(_ value: AgentJSON) -> [String] {
+            AgentAnswerCheck.problems(in: ["paths": .array([.string("cards/a.png"), .string("cards/gone.png")]), "interactions": value],
+                                      word: "maker", makes: MakerPackage.makes, directory: folder.path)
+        }
+        func one(_ object: [String: AgentJSON]) -> [String] { interactions(.array([.object(object)])) }
+        let rows: [(problems: [String], reason: String)] = [
+            (one(["kind": .string("Preview"), "paths": .array([.string("cards/a.png")])]), "`interactions[0].kind` is one lowercase word"),
+            (one(["kind": .string("preview"), "paths": .array([])]),
+             "`interactions[0]` names no file: its `paths` lists the files it is about, lead first"),
+            (one(["kind": .string("preview")]), "`interactions[0]` needs a `kind` and `paths`"),
+            (one(["kind": .string("preview"), "paths": .array([.string("cards/a.png"), .string("./cards/a.png")])]),
+             "`interactions[0]` names ./cards/a.png twice"),
+            (one(["kind": .string("preview"), "paths": .array([.string("cards/gone.png")])]),
+             "`interactions[0]` is about cards/gone.png, which is not on disk"),
+            (one(["kind": .string("preview"), "paths": .array([.string("cards/a.png")]), "title": .integer(3)]),
+             "`interactions[0].title` is a caption: a string"),
+            (interactions(.string("preview")), "`interactions` is not a list"),
+        ]
+        for row in rows { XCTAssertTrue(row.problems.contains(row.reason), "\(row.reason): \(row.problems)") }
+        XCTAssertEqual(one(["kind": .string("preview"), "paths": .array([.string(written.path)]), "title": .string("a")]), [],
+                       "an absolute path to a written file passes")
     }
 
     func testAThrownRefusalKeepsItsKindPastTheEngine() async throws {
