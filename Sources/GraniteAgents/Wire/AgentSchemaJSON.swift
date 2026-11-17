@@ -183,9 +183,13 @@ public enum AgentSchemaJSON {
                 "source": ["oneOf": [
                     ["type": "object", "required": ["url"], "properties": ["url": string, "revision": string]],
                     ["type": "object", "required": ["path"], "properties": ["path": string]],
+                    described(["type": "object", "required": ["delivered"], "properties": ["delivered": string]],
+                              "a store's listing: its code is fetched from the store on every install, update and rebuild"),
                 ]],
                 "revision": described(string, "the source's commit"),
                 "granite": described(string, "the Granite revision the runner was built against"),
+                "dependencies": described(["type": "object", "additionalProperties": string],
+                                          "what the runner's dependencies resolved to: each remote package by identity, at its commit"),
                 "executable": described(string, "relative to the installation's folder"),
                 "sha256": ["type": "string", "pattern": "^[0-9a-f]{64}$"],
                 "size": integer,

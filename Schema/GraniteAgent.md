@@ -371,12 +371,16 @@ enum Agent {
 
 A host installs a package as a runner on its shelf:
 
-1. **Fetch.** A repository is cloned at a revision, or its default branch's head. A folder is used as it is.
+1. **Fetch.** A repository is cloned at a revision, or its default branch's head. A folder is used as it is. A
+   store's listing (`{"delivered": "<id>"}`) is fetched from the store at what the listing pins then, and the
+   record keeps only the listing.
 2. **Read the manifest.** `swift package dump-package` gives the package's name, its libraries, the macOS it
    needs, and its Granite requirement. A package that does not depend on Granite is refused.
 3. **Write the runner.** One executable target, `agent`, depends on every library of the package and on
    `GraniteAgents` at the package's own requirement. Its one file is the runner of §8.
-4. **Build** it in release.
+4. **Build** it in release. The runner is written with nothing resolved, so its dependencies resolve afresh on
+   every install. `dependencies` records what they resolved to: each pin of the runner's `Package.resolved`, a
+   remote package by identity, at its commit. A folder dependency is not pinned, so it is not recorded.
 5. **Describe and check.** `agent --describe` gives its entries. A runner with none, or with a word another
    installation carries, is refused.
 6. **Install** `agent` and every resource bundle beside it into `<shelf>/<Name>/`, with `installation.json`,
@@ -385,8 +389,8 @@ A host installs a package as a runner on its shelf:
 ```json
 {"format": "granite-agent-installation/1", "name": "PlateAgent",
  "source": {"url": "https://github.com/riteshpakala/PlateAgent.git"}, "revision": "f9bdda72…",
- "granite": "e64723f3…", "executable": "agent", "sha256": "…", "size": 9123456, "modified": 1793427000.5,
- "builtAt": "2026-10-31T08:00:00Z", "entries": [ … ]}
+ "granite": "e64723f3…", "dependencies": {"granite": "e64723f3…"}, "executable": "agent", "sha256": "…",
+ "size": 9123456, "modified": 1793427000.5, "builtAt": "2026-10-31T08:00:00Z", "entries": [ … ]}
 ```
 
 - **Tamper rule.** A shelf is a folder anything running as the user can write to. A host must check the
@@ -394,13 +398,18 @@ A host installs a package as a runner on its shelf:
   not run one that differs; installing again is the way back.
 - **Offering an installation.** A host offers a shelf's agents from the records alone, without running a
   runner. It reads the shelf again when a record changes.
+- **Update and rebuild.** Both install again from the record and replace the installation whole. An update
+  takes the source at its newest: a repository at its default branch's head. A rebuild takes it as it was
+  built, and keeps the record's `source` as it was: a repository at the recorded `revision`, a folder as it is,
+  a listing at what its store pins now. A repository's code stays, its dependencies resolve afresh, and
+  comparing `dependencies` says what moved. The host keeps the agent's support folder (§6) through both.
 
 ## 11. Versioning
 
 - **The version.** `granite-agent/<major>` names the wire, the entry and the installation together.
 - **A minor change** adds an optional field. A reader must ignore fields it does not know, so it stays
-  `granite-agent/1`. `makes`, `hello.answer`, `refused`, the answer's reserved keys, `takes`, `keeps`, and
-  `perform`'s `attachments` and `support` came so.
+  `granite-agent/1`. `makes`, `hello.answer`, `refused`, the answer's reserved keys, `takes`, `keeps`,
+  `perform`'s `attachments` and `support`, and the installation's `dependencies` came so.
 - **The answer.** `granite-answer/<major>` names the answer (§4.2) apart from the wire: a new reserved key is
   minor, and so is a new interaction kind (§4.3); `interactions` came so, and the answer stayed
   `granite-answer/1`. Conforming is opt-in until every agent of a shelf conforms; then `Output: AgentAnswer` is required,
@@ -443,4 +452,6 @@ A host installs a package as a runner on its shelf:
 - [ ] It performs the interactions it has a compatible way to perform, and ignores the rest, a kind it does not
       know included.
 - [ ] It installs from source (§10), refuses clashing words, and checks the digest before every launch.
+- [ ] It rebuilds from the record: a repository at its recorded `revision`, its dependencies resolved afresh and
+      recorded in `dependencies`.
 - [ ] It offers a shelf from its records, and reads it again when they change.

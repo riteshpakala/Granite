@@ -6,11 +6,17 @@
 //
 //        A store's listing (`.delivered`) is fetched through the host's `AgentDeliverer` (AgentDelivery.swift): an
 //        archive downloaded, its transforms undone, unpacked inside the work folder, and gone with it after the build.
+//        Three ways in, one install: `install` (a source as said), `update` (the recorded source at its newest) and
+//        `rebuild` (the recorded source at the commit it was built from).
 //
 //  PIN:  THE RUNNER IS GENERATED, THE PACKAGE IS UNTOUCHED. Any package with a record installs as it is: the runner
 //        depends on every library it makes and on GraniteAgents at the package's own Granite requirement.
 //  PIN:  ONE WORD, ONE INSTALLATION. A package that carries a word another installation carries is refused;
 //        installing the same package again replaces it whole.
+//  PIN:  A REBUILD KEEPS THE COMMIT, NOT THE DEPENDENCIES. A repository is checked out at the commit the installation
+//        recorded (a folder is built as it is, a store's listing at what it pins now), and the runner, written in a
+//        fresh work folder with nothing resolved, resolves its dependencies afresh; the new record's `dependencies`
+//        says what they resolved to, so a host can say what moved.
 
 #if os(macOS)
 import Foundation
@@ -44,6 +50,12 @@ public struct AgentInstaller: Sendable {
     /// Installs the package at `source`, replacing an installation of the same name.
     @discardableResult
     public func install(_ source: AgentSource, progress: @escaping @Sendable (Progress) -> Void = { _ in }) async throws -> AgentInstallation {
+        try await install(source, checkout: nil, progress: progress)
+    }
+
+    /// The one install. `checkout`, when given, is what a repository is checked out at in place of the revision its
+    /// source asks for; the record keeps `source` as it is either way.
+    private func install(_ source: AgentSource, checkout: String?, progress: @escaping @Sendable (Progress) -> Void) async throws -> AgentInstallation {
         let manager = FileManager.default
         let work = shelf.folder.appendingPathComponent(".builds", isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
         try manager.createDirectory(at: work, withIntermediateDirectories: true)
@@ -60,9 +72,9 @@ public struct AgentInstaller: Sendable {
             package = work.appendingPathComponent(name.replacingOccurrences(of: ".git", with: ""), isDirectory: true)
             let clone = try await AgentCommand.run(["git", "clone", "--quiet", url, package.path], in: work)
             guard clone.status == 0 else { throw AgentInstallError.fetch(source: url, reason: Self.tail(clone.output)) }
-            if let wanted {
-                let checkout = try await AgentCommand.run(["git", "checkout", "--quiet", wanted], in: package)
-                guard checkout.status == 0 else { throw AgentInstallError.fetch(source: "\(url)@\(wanted)", reason: Self.tail(checkout.output)) }
+            if let wanted = checkout ?? wanted {
+                let checked = try await AgentCommand.run(["git", "checkout", "--quiet", wanted], in: package)
+                guard checked.status == 0 else { throw AgentInstallError.fetch(source: "\(url)@\(wanted)", reason: Self.tail(checked.output)) }
             }
             revision = try await Self.head(of: package)
         case .path(let path):
@@ -130,8 +142,10 @@ public struct AgentInstaller: Sendable {
         let executable = staged.appendingPathComponent("agent")
         for finisher in finishers { try await finisher.finish(executable, name: read.name) }
         let attributes = try manager.attributesOfItem(atPath: executable.path)
+        let dependencies = Self.dependencies(runner)
         let installation = AgentInstallation(
-            name: read.name, source: source, revision: revision, granite: Self.graniteRevision(runner), sha256: try AgentShelf.sha256(of: executable),
+            name: read.name, source: source, revision: revision, granite: dependencies?["granite"], dependencies: dependencies,
+            sha256: try AgentShelf.sha256(of: executable),
             size: (attributes[.size] as? NSNumber)?.int64Value ?? 0, modified: (attributes[.modificationDate] as? Date)?.timeIntervalSince1970,
             builtAt: ISO8601DateFormatter().string(from: Date()), entries: entries)
         let encoder = JSONEncoder()
@@ -149,6 +163,15 @@ public struct AgentInstaller: Sendable {
     public func update(_ name: String, progress: @escaping @Sendable (Progress) -> Void = { _ in }) async throws -> AgentInstallation {
         guard let installed = shelf.installation(name) else { throw AgentInstallError.notInstalled(name) }
         return try await install(installed.source.newest, progress: progress)
+    }
+
+    /// Builds the installation called `name` again from what it recorded: a repository at the commit it was built
+    /// from, a folder as it is, a store's listing at what it pins now. Its dependencies resolve afresh; the record it
+    /// returns keeps the source as it was and says what they resolved to (``AgentInstallation/dependencies``).
+    @discardableResult
+    public func rebuild(_ name: String, progress: @escaping @Sendable (Progress) -> Void = { _ in }) async throws -> AgentInstallation {
+        guard let installed = shelf.installation(name) else { throw AgentInstallError.notInstalled(name) }
+        return try await install(installed.source, checkout: Self.pin(installed), progress: progress)
     }
 
     /// Removes the installation called `name`, or carrying the agent `name`.
@@ -177,13 +200,25 @@ public struct AgentInstaller: Sendable {
         return head.status == 0 ? head.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     }
 
-    private static func graniteRevision(_ runner: URL) -> String? {
+    /// What a rebuild checks out: a repository's recorded commit, else the revision its source asks for; nothing for a
+    /// folder or a store's listing, which are taken as they are.
+    static func pin(_ installed: AgentInstallation) -> String? {
+        guard case .git(_, let wanted) = installed.source else { return nil }
+        return installed.revision ?? wanted
+    }
+
+    /// What a built runner's dependencies resolved to: each pin of its `Package.resolved`, by identity, at its
+    /// commit. A folder dependency is never pinned; nil when nothing was (no file, or no pins).
+    public static func dependencies(_ runner: URL) -> [String: String]? {
         guard let data = try? Data(contentsOf: runner.appendingPathComponent("Package.resolved")),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let pins = object["pins"] as? [[String: Any]],
-              let granite = pins.first(where: { ($0["identity"] as? String) == "granite" }),
-              let state = granite["state"] as? [String: Any] else { return nil }
-        return state["revision"] as? String
+              let pins = object["pins"] as? [[String: Any]] else { return nil }
+        var resolved: [String: String] = [:]
+        for pin in pins {
+            guard let identity = pin["identity"] as? String, let revision = (pin["state"] as? [String: Any])?["revision"] as? String else { continue }
+            resolved[identity] = revision
+        }
+        return resolved.isEmpty ? nil : resolved
     }
 
     /// The JSON object in a tool's output, past any line it printed before it.

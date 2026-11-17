@@ -41,6 +41,17 @@ installed.words   // ["plate"]
 `update(_:)` installs it from its source at its newest. A package whose word another installation carries is
 refused.
 
+`rebuild(_:)` builds an installation again as it was built: a repository at the commit it recorded, a folder as it
+is, a store's listing at what it pins now. The runner is written with nothing resolved, so the package's code stays
+and its dependencies take what their requirements resolve to now; ``AgentInstallation/dependencies`` says what that
+was, each remote package by identity at its commit:
+
+```swift
+let before = installer.shelf.installation("plate")?.dependencies
+let rebuilt = try await installer.rebuild("plate")
+rebuilt.dependencies   // ["granite": "1c2d3e4…", …]: beside `before`, what moved
+```
+
 ### Install what a store delivers
 
 A store's listing is ``AgentSource/delivered(id:)``: the installation keeps only the listing, and every install and
@@ -96,6 +107,7 @@ echo '{"perform":{"word":"parrot","input":{"text":"hi"},"model":false}}' | agent
 - A host hands a call only the attachments its agent `takes`, and places a support folder for an agent that
   `keeps` something; both cross the wire in `perform`, and only when offered.
 - A host checks the digest before every launch, and installs again rather than running a changed executable.
+- A host rebuilds to take what an agent's dependencies resolve to now, and says what moved from `dependencies`.
 
 ## Topics
 

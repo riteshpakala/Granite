@@ -26,8 +26,8 @@ final class AgentSchemaGoldenTests: XCTestCase {
         XCTAssertTrue(standard.contains(AgentWire.version))
         for kind in AgentWire.kinds { XCTAssertTrue(standard.contains("`\(kind)`"), "the standard does not name the message `\(kind)`") }
         for field in AgentWire.Entry.fieldNames { XCTAssertTrue(standard.contains("`\(field)`"), "the standard does not name the entry field `\(field)`") }
-        let record = AgentInstallation(name: "n", source: .git(url: "u", revision: "r"), revision: "r", granite: "g", sha256: "s", size: 1,
-                                       modified: 1, builtAt: "b", entries: [])
+        let record = AgentInstallation(name: "n", source: .git(url: "u", revision: "r"), revision: "r", granite: "g", dependencies: ["granite": "g"],
+                                       sha256: "s", size: 1, modified: 1, builtAt: "b", entries: [])
         let keys = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(record)) as? [String: Any]).keys
         for key in keys { XCTAssertTrue(standard.contains("\"\(key)\""), "the standard's installation example lacks `\(key)`") }
         for name in AgentSchemaJSON.files.keys { XCTAssertTrue(standard.contains(name), "the standard does not point to \(name)") }

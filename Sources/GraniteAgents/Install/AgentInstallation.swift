@@ -15,6 +15,10 @@ public struct AgentInstallation: Codable, Sendable, Equatable {
     public var revision: String?
     /// The Granite revision the runner was built against.
     public var granite: String?
+    /// What the runner's dependencies resolved to when it was built: each remote package by identity, at its commit
+    /// (Granite among them, as `granite` says too). A folder dependency is not pinned, so it is not here; nil when the
+    /// runner pinned nothing.
+    public var dependencies: [String: String]?
     /// The executable, relative to the installation's folder.
     public var executable: String
     /// The executable's SHA-256, lowercase hex.
@@ -27,10 +31,11 @@ public struct AgentInstallation: Codable, Sendable, Equatable {
     public var builtAt: String
     public var entries: [AgentWire.Entry]
 
-    public init(name: String, source: AgentSource, revision: String?, granite: String?, executable: String = "agent",
-                sha256: String, size: Int64, modified: Double?, builtAt: String, entries: [AgentWire.Entry]) {
+    public init(name: String, source: AgentSource, revision: String?, granite: String?, dependencies: [String: String]? = nil,
+                executable: String = "agent", sha256: String, size: Int64, modified: Double?, builtAt: String, entries: [AgentWire.Entry]) {
         format = Self.format
-        self.name = name; self.source = source; self.revision = revision; self.granite = granite; self.executable = executable
+        self.name = name; self.source = source; self.revision = revision; self.granite = granite; self.dependencies = dependencies
+        self.executable = executable
         self.sha256 = sha256; self.size = size; self.modified = modified; self.builtAt = builtAt; self.entries = entries
     }
 

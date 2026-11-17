@@ -400,6 +400,13 @@
       "format" : "date-time",
       "type" : "string"
     },
+    "dependencies" : {
+      "additionalProperties" : {
+        "type" : "string"
+      },
+      "description" : "what the runner's dependencies resolved to: each remote package by identity, at its commit",
+      "type" : "object"
+    },
     "entries" : {
       "items" : {
         "$ref" : "#/$defs/entry"
@@ -460,6 +467,18 @@
           },
           "required" : [
             "path"
+          ],
+          "type" : "object"
+        },
+        {
+          "description" : "a store's listing: its code is fetched from the store on every install, update and rebuild",
+          "properties" : {
+            "delivered" : {
+              "type" : "string"
+            }
+          },
+          "required" : [
+            "delivered"
           ],
           "type" : "object"
         }
