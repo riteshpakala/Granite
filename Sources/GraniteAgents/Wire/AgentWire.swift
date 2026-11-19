@@ -6,6 +6,8 @@
 //            agent → host   {"note": "round 1: measured clean"}
 //            agent → host   {"model": {"id": 1, "object": {"schema": {...}, "system": "...", "user": "...", ...}}}
 //            host → agent   {"answer": {"id": 1, "object": {...}}}
+//            agent → host   {"agent": {"id": 1, "word": "veil", "input": {...}}}      (a word the package `needs`)
+//            host → agent   {"called": {"id": 1, "output": {...}}}   or   {"called": {"id": 1, "failed": "...", "refused": {...}}}
 //            agent → host   {"output": {...}}   or   {"failed": "a sentence", "refused": {"kind": "call", "reasons": [...]}}
 //            host → agent   {"cancel": {}}
 //            agent → host   {"entries": [...]}   (only with --describe)
@@ -29,6 +31,8 @@ public enum AgentWire: Sendable, Equatable {
     case note(String)
     case model(ModelAsk)
     case answer(ModelAnswer)
+    case agent(AgentCall)
+    case called(AgentCalled)
     case output(AgentJSON)
     case failed(Failure)
     case cancel
@@ -68,10 +72,13 @@ public enum AgentWire: Sendable, Equatable {
         public var support: String?
         /// Whether the host offers its model; an agent that asks without one is told so.
         public var model: Bool
+        /// The agents the host will call for the run (`AgentHost.agents`), by word; sent only when it offers some, so a
+        /// call without them is the line it always was.
+        public var agents: [String]?
         public init(word: String, input: AgentJSON, directory: String? = nil, ask: String? = nil, attachments: [String]? = nil,
-                    support: String? = nil, model: Bool = false) {
+                    support: String? = nil, model: Bool = false, agents: [String]? = nil) {
             self.word = word; self.input = input; self.directory = directory; self.ask = ask
-            self.attachments = attachments; self.support = support; self.model = model
+            self.attachments = attachments; self.support = support; self.model = model; self.agents = agents
         }
     }
 
@@ -103,6 +110,27 @@ public enum AgentWire: Sendable, Equatable {
         }
     }
 
+    /// What an agent asks the host to call for it: another agent, by a word its package needs, under an id its answer
+    /// comes back under.
+    public struct AgentCall: Codable, Sendable, Equatable {
+        public var id: Int
+        public var word: String
+        public var input: AgentJSON
+        public init(id: Int, word: String, input: AgentJSON) { self.id = id; self.word = word; self.input = input }
+    }
+
+    /// The host's answer to an `agent` call: the called agent's output, or why there is none (its sentence, and its
+    /// refusal when it was one), under the call's id.
+    public struct AgentCalled: Codable, Sendable, Equatable {
+        public var id: Int
+        public var output: AgentJSON?
+        public var failed: String?
+        public var refused: AgentRefusal?
+        public init(id: Int, output: AgentJSON? = nil, failed: String? = nil, refused: AgentRefusal? = nil) {
+            self.id = id; self.output = output; self.failed = failed; self.refused = refused
+        }
+    }
+
     /// The message's key, as the line names it.
     public var kind: String {
         switch self {
@@ -111,6 +139,8 @@ public enum AgentWire: Sendable, Equatable {
         case .note: return "note"
         case .model: return "model"
         case .answer: return "answer"
+        case .agent: return "agent"
+        case .called: return "called"
         case .output: return "output"
         case .failed: return "failed"
         case .cancel: return "cancel"
@@ -119,5 +149,5 @@ public enum AgentWire: Sendable, Equatable {
     }
 
     /// Every message's key, in the order a call says them.
-    public static let kinds = ["hello", "perform", "note", "model", "answer", "output", "failed", "cancel", "entries"]
+    public static let kinds = ["hello", "perform", "note", "model", "answer", "agent", "called", "output", "failed", "cancel", "entries"]
 }

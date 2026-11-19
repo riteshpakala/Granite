@@ -28,12 +28,17 @@ final class AgentWireTests: XCTestCase {
             .model(.init(id: 1, kind: .object, schema: .object(["type": .string("object")]), system: "s", user: "u", maxTokens: 16, seconds: 5)),
             .answer(.init(id: 1, object: .object(["n": .integer(3)]))),
             .answer(.init(id: 2, error: "no model")),
+            .agent(.init(id: 1, word: "veil", input: .object(["action": .string("seal")]))),
+            .called(.init(id: 1, output: .object(["id": .string("c1f8")]))),
+            .called(.init(id: 2, failed: "no picture", refused: AgentRefusal(.input, "no picture"))),
             .output(.object(["said": .string("hi"), "ratio": .number(0.5), "none": .null, "list": .array([.bool(true)])])),
             .failed("it broke"),
             .cancel,
             .entries([AgentWire.Entry(.package(AnyAgentPackage(EchoPackage.self)))]),
         ]
-        XCTAssertEqual(messages.map(\.kind), AgentWire.kinds.filter { $0 != "answer" }.flatMap { $0 == "model" ? ["model", "answer", "answer"] : [$0] })
+        XCTAssertEqual(messages.map(\.kind), AgentWire.kinds.filter { $0 != "answer" }.flatMap {
+            $0 == "model" ? ["model", "answer", "answer"] : $0 == "called" ? ["called", "called"] : [$0]
+        })
         for message in messages {
             let line = try message.line()
             XCTAssertEqual(line.last, 0x0A)
@@ -56,6 +61,9 @@ final class AgentWireTests: XCTestCase {
         guard case .perform(let read) = try AgentWire.read(Data(#"{"perform":{"word":"echo","input":{},"model":false}}"#.utf8)) else { return XCTFail() }
         XCTAssertNil(read.attachments, "a host from before them reads as offering none")
         XCTAssertNil(read.support)
+        XCTAssertNil(read.agents, "and no agents")
+        let calling = AgentWire.perform(.init(word: "needy", input: .object([:]), agents: ["veil"]))
+        XCTAssertTrue(String(decoding: try calling.line(), as: UTF8.self).contains(#""agents":["veil"]"#))
     }
 
     func testAFieldAReaderDoesNotKnowIsIgnoredAndAMessageItDoesNotKnowIsNot() throws {
@@ -88,6 +96,12 @@ final class AgentWireTests: XCTestCase {
         guard case .package(let hostedDescribed) = hostedRead.rosterEntry(perform: { _, _ in Data() }) else { return XCTFail() }
         XCTAssertEqual(hostedDescribed.takes, ["public.image"], "what it takes crosses a description")
         XCTAssertEqual(hostedDescribed.keeps, HostedPackage.keeps)
+        XCTAssertNil(entry.needs, "a package that needs no agent says nothing of it")
+        let needy = AgentWire.Entry(.package(AnyAgentPackage(NeedyPackage.self)))
+        XCTAssertEqual(needy.needs, NeedyPackage.needs)
+        let needyRead = try JSONDecoder().decode(AgentWire.Entry.self, from: try JSONEncoder().encode(needy))
+        guard case .package(let needyDescribed) = needyRead.rosterEntry(perform: { _, _ in Data() }) else { return XCTFail() }
+        XCTAssertEqual(needyDescribed.needs, NeedyPackage.needs, "what it needs crosses a description")
         let worker = AgentWire.Entry(.worker(AnyWorkerSpec(ScoutWorker.self)))
         XCTAssertEqual(worker.kind, .worker)
         guard case .worker(let spec) = worker.rosterEntry(perform: { _, _ in Data() }) else { return XCTFail() }

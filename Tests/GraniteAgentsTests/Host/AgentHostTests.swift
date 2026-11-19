@@ -81,4 +81,53 @@ final class AgentHostTests: XCTestCase {
         XCTAssertEqual(hosted.takes, ["public.image"])
         XCTAssertEqual(hosted.keeps, HostedPackage.keeps)
     }
+
+    /// A package calls the agents it needs through its host, and only those: the host's other words are not its to see,
+    /// a word it never declared is its own fault, never sent, and an agent the host cannot call is the host's refusal.
+    func testAPackageCallsOnlyTheAgentsItNeeds() async throws {
+        let agents = TableAgents([
+            "echo": { data in
+                guard case .object(let call)? = AgentJSON(data: data), case .string(let text)? = call["text"] else { return Data() }
+                return try JSONEncoder().encode("\(text) twice")
+            },
+            "hosted": { _ in Data("\"never\"".utf8) },
+        ])
+        let needy = AnyAgentPackage(NeedyPackage.self)
+        XCTAssertEqual(needy.needs, NeedyPackage.needs)
+        let data = try await needy.perform(Data(#"{"word": "echo", "text": "hi"}"#.utf8), host: AgentHost(agents: agents))
+        let answer = try JSONDecoder().decode(NeedyPackage.Answer.self, from: data)
+        XCTAssertEqual(answer.heard, "hi twice")
+        XCTAssertEqual(answer.words, ["echo"], "the run sees only the words its package needs")
+
+        do {
+            _ = try await needy.perform(Data(#"{"word": "hosted", "text": "hi"}"#.utf8), host: AgentHost(agents: agents))
+            XCTFail("hosted is not a need")
+        } catch AgentHostError.undeclared(let word, let caller) {
+            XCTAssertEqual(word, "hosted")
+            XCTAssertEqual(caller, "needy")
+            XCTAssertNil(AgentRefusal.of(AgentHostError.undeclared(word: word, caller: caller)), "its own fault, not a refusal")
+        }
+        XCTAssertEqual(agents.called, ["echo"], "the undeclared word never reached the host")
+
+        do {
+            _ = try await needy.perform(Data(#"{"word": "echo", "text": "hi"}"#.utf8), host: .none)
+            XCTFail("this host calls no agents")
+        } catch AgentPackageError.refused(_, let refusal, _) {
+            XCTAssertEqual(refusal.kind, .host, "a host that cannot call a need refuses as the host")
+            XCTAssertTrue(refusal.reasons[0].contains("install `echo`"), refusal.reasons[0])
+        }
+    }
+
+    /// What the needed agent refuses comes back as the host's refusal, its own kind and words inside: the caller's call
+    /// was not what was wrong.
+    func testANeededAgentsRefusalIsTheHosts() async throws {
+        let agents = TableAgents(["echo": { _ in throw AgentHostError.agent(word: "echo", refusal: AgentRefusal(.input, "no picture"), message: "no picture") }])
+        do {
+            _ = try await AnyAgentPackage(NeedyPackage.self).perform(Data(#"{"word": "echo", "text": "hi"}"#.utf8), host: AgentHost(agents: agents))
+            XCTFail("echo refused")
+        } catch AgentPackageError.refused(_, let refusal, let said) {
+            XCTAssertEqual(refusal.kind, .host)
+            XCTAssertTrue(said.contains("`echo` refused (input): no picture"), said)
+        }
+    }
 }

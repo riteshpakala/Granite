@@ -1,6 +1,6 @@
 //  WHAT: What the app that runs a package offers the run beside its JSON: the folder it works in, what the
 //        person asked, the files the person attached, a folder of the agent's own, a line of progress the app
-//        shows, and the model it has loaded. A run reads it through `context.host`.
+//        shows, the model it has loaded, and the agents it calls for the package. A run reads it through `context.host`.
 //  PIN:  OFFERED, NEVER ASSUMED. `.none` offers nothing, so an app without a model still runs every package;
 //        a package that cannot work without the model asks for it with `model(for:)`, which says whose run
 //        went without.
@@ -26,13 +26,17 @@ public struct AgentHost: Sendable {
     public let support: String?
     /// The model the host has loaded; nil when it has none.
     public let model: (any AgentHostModel)?
+    /// The agents the host calls for the run: the package's `needs` it can serve. Nil when it serves none; a run sees
+    /// only the words its package declares.
+    public let agents: (any AgentHostAgents)?
     /// A line of progress, shown as the host shows its agents' work (an agent map, a log).
     public let note: @Sendable (String) -> Void
 
     public init(directory: String? = nil, ask: String? = nil, attachments: [String] = [], support: String? = nil,
-                model: (any AgentHostModel)? = nil, note: @escaping @Sendable (String) -> Void = { _ in }) {
+                model: (any AgentHostModel)? = nil, agents: (any AgentHostAgents)? = nil,
+                note: @escaping @Sendable (String) -> Void = { _ in }) {
         self.directory = directory; self.ask = ask; self.attachments = attachments; self.support = support
-        self.model = model; self.note = note
+        self.model = model; self.agents = agents; self.note = note
     }
 
     /// A host that offers nothing: a call made with JSON alone.
@@ -42,5 +46,16 @@ public struct AgentHost: Sendable {
     public func model(for word: String) throws -> any AgentHostModel {
         guard let model else { throw AgentHostError.noModel(word: word) }
         return model
+    }
+
+    /// The host's agents, or `AgentHostError.noAgent` naming the package and the word it needs.
+    public func agents(for word: String, needing need: String) throws -> any AgentHostAgents {
+        guard let agents, agents.words.contains(need) else { throw AgentHostError.noAgent(word: need, caller: word) }
+        return agents
+    }
+
+    /// The same host, offering `agents` instead.
+    public func serving(_ agents: (any AgentHostAgents)?) -> AgentHost {
+        AgentHost(directory: directory, ask: ask, attachments: attachments, support: support, model: model, agents: agents, note: note)
     }
 }

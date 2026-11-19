@@ -1,7 +1,7 @@
 import Foundation
 
 /// One call a server answers: `hello`, then the host's `perform` started on the roster's package, the host's
-/// answers matched to the run's asks, a `cancel` or the host's leaving cancelling it, and exactly one `output`
+/// answers matched to the run's asks and its `called` to the run's agent calls, a `cancel` or the host's leaving cancelling it, and exactly one `output`
 /// or `failed` said at the end.
 final class AgentServerCall: @unchecked Sendable {
     private let channel: any AgentChannel
@@ -9,6 +9,7 @@ final class AgentServerCall: @unchecked Sendable {
     private let lock = NSLock()
     private var run: Task<Void, Never>?
     private var model: ChannelHostModel?
+    private var agents: ChannelHostAgents?
     private var cancelled = false
     private var done: CheckedContinuation<AgentServer.Exit, Never>?
     private var ended: AgentServer.Exit?
@@ -42,6 +43,7 @@ final class AgentServerCall: @unchecked Sendable {
             switch message {
             case .perform(let perform): start(perform)
             case .answer(let answer): lock.withLock { model }?.resolve(answer)
+            case .called(let called): lock.withLock { agents }?.resolve(called)
             case .cancel: cancel()
             default: finish(.unreadable, .failed("the host said `\(message.kind)`, which is not a host's message"))
             }
@@ -50,6 +52,7 @@ final class AgentServerCall: @unchecked Sendable {
         // that closes its end at once (`echo '{"perform": …}' | runner`) is served; only `cancel` or SIGTERM
         // cancels. A host that left before calling ends the process.
         lock.withLock { model }?.leave()
+        lock.withLock { agents }?.leave()
         if lock.withLock({ run == nil }) { finish(.unreadable, .failed("the host left before making a call")) }
     }
 
@@ -62,9 +65,10 @@ final class AgentServerCall: @unchecked Sendable {
             return finish(.failed, .failed("no agent is called `\(perform.word)` in this process; it carries \(carried.isEmpty ? "none" : carried)"))
         }
         let model = perform.model ? ChannelHostModel(channel: channel) : nil
+        let agents = perform.agents.map { ChannelHostAgents(channel: channel, words: $0) }
         let channel = self.channel
         let host = AgentHost(directory: perform.directory, ask: perform.ask, attachments: perform.attachments ?? [], support: perform.support,
-                             model: model, note: { line in try? channel.send(.note(line)) })
+                             model: model, agents: agents, note: { line in try? channel.send(.note(line)) })
         let input = perform.input.data()
         let task = Task {
             do {
@@ -81,6 +85,7 @@ final class AgentServerCall: @unchecked Sendable {
         }
         let cancelledAlready: Bool = lock.withLock {
             self.model = model
+            self.agents = agents
             run = task
             return cancelled
         }

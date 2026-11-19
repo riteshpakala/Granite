@@ -2,7 +2,8 @@ import Foundation
 import GraniteAgents
 
 /// A package agent the runner fixture carries, to exercise every message of the wire: it says its text back,
-/// notes as it goes, asks the host's model when told, waits when told, and crashes when told.
+/// notes as it goes, asks the host's model when told, calls the agent it needs when told, waits when told, and crashes
+/// when told.
 struct ParrotPackage: GraniteAgentPackage {
     struct Input: Codable, Sendable {
         var text: String
@@ -12,6 +13,7 @@ struct ParrotPackage: GraniteAgentPackage {
         var crash: Bool?
         var fail: Bool?
         var fault: Bool?
+        var callAgent: Bool?
         var directory: String?
     }
 
@@ -23,6 +25,7 @@ struct ParrotPackage: GraniteAgentPackage {
         var ask: String?
         var attachments: [String]?
         var support: String?
+        var agentSaid: String?
         var pid: Int32
     }
 
@@ -45,6 +48,7 @@ struct ParrotPackage: GraniteAgentPackage {
     static let guide = "Give it text; it says it back."
     static let takes = ["public.image"]
     static let keeps: String? = "the lines it has said"
+    static let needs = [AgentNeed(word: "echo", why: "says the text back")]
 
     func run(_ input: Input, context: Context) -> AsyncThrowingStream<Said, Error> {
         AsyncThrowingStream { continuation in
@@ -62,6 +66,10 @@ struct ParrotPackage: GraniteAgentPackage {
                     if input.askModel == true {
                         said.modelSaid = try await context.host.model(for: Self.word).object(Count.self, system: "Count.", user: "How many?",
                                                                                               maxTokens: 16, seconds: 5).n
+                    }
+                    if input.callAgent == true {
+                        said.agentSaid = try await context.host.agents(for: Self.word, needing: "echo")
+                            .call("echo", input: ["text": input.text], as: String.self)
                     }
                     continuation.yield(said)
                     continuation.finish()

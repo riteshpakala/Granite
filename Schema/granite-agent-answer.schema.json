@@ -188,6 +188,13 @@
           "description" : "the module that declares it",
           "type" : "string"
         },
+        "needs" : {
+          "description" : "the agents it calls to do its work, each by its word; a host offers the ones it can serve, and a run may call no other",
+          "items" : {
+            "$ref" : "#/$defs/need"
+          },
+          "type" : "array"
+        },
         "reportRule" : {
           "type" : "string"
         },
@@ -305,6 +312,28 @@
         "kind",
         "what",
         "into"
+      ],
+      "type" : "object"
+    },
+    "need" : {
+      "properties" : {
+        "source" : {
+          "description" : "where it can be had when a host has no store to find it in: a git URL",
+          "type" : "string"
+        },
+        "why" : {
+          "description" : "what it is needed for, in a sentence a host may show",
+          "type" : "string"
+        },
+        "word" : {
+          "description" : "the word the needed agent is called by",
+          "pattern" : "^[a-z][a-z0-9-]*$",
+          "type" : "string"
+        }
+      },
+      "required" : [
+        "word",
+        "why"
       ],
       "type" : "object"
     },

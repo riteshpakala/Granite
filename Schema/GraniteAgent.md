@@ -69,7 +69,7 @@ public struct Marble: GraniteAgentPackage {
 ```
 
 - It must declare `word`, `summary`, `Input` and `Output` (both `Codable`), and `run`.
-- It may declare `fields`, `guide`, `lanes` (2 when left out), `makes`, `takes` and `keeps` (§3), and `compute()`.
+- It may declare `fields`, `guide`, `lanes` (2 when left out), `makes`, `takes`, `keeps` and `needs` (§3), and `compute()`.
 - Its `Output` should conform to `AgentAnswer` (§4.2): an output that does is checked and stamped before it
   leaves the process. One that does not answers as it always did, until the requirement lands (§11).
 - `output(from:)` reads the answer off the run's events. When the output is the event type, it is the last event.
@@ -117,13 +117,20 @@ static let makes = [AgentMake(kind: "view", what: "the social screens as reusabl
 - `keeps` says what the agent keeps between calls, in a sentence a host may show a person ("the signatures of
   the images you watermark"). Declaring one asks the host for a folder of the agent's own (§6).
 
+- `needs` lists the other agents it calls to do its work, each an `AgentNeed`: the needed agent's `word`, `why`
+  in a sentence a host may show, and a `source` (a git URL) for a host that has no store to find it in. A run
+  calls them through its host (§6) and must call no other: a call to a word it does not declare is its own fault,
+  refused before it leaves the run.
+
 ```swift
 static let takes = ["public.image"]
 static let keeps: String? = "the signatures of the images you watermark, so a later call can say whose they are"
+static let needs = [AgentNeed(word: "veil", why: "seals each rendered page", source: "https://github.com/rao-craft/VeilAgent")]
 ```
 
 With `makes`, they say what passes between an agent and its host outside the input: `takes` what it reads from
-the host, `keeps` what it keeps with the host, and `makes` what it writes into the host's folder.
+the host, `keeps` what it keeps with the host, `needs` whom it asks the host to call, and `makes` what it writes
+into the host's folder.
 
 ## 4. Input and output
 
@@ -255,12 +262,20 @@ A run reads what its host offers through `context.host`, an `AgentHost`:
 | `support` | A folder of the agent's own, which the host keeps across calls, installs and rebuilds | nil: the host offers none, or the agent declares no `keeps` |
 | `note(_:)` | A line of progress the host shows as it shows its agents' work | Does nothing |
 | `model` | The model the host has loaded (`AgentHostModel`) | nil: the host has none |
+| `agents` | The agents the host calls for the run (`AgentHostAgents`): the agent's `needs` it can serve, in `words` | nil: the host calls none |
 
 - `model.object(schema:system:user:maxTokens:seconds:)` answers a JSON object that fits a JSON Schema.
 - `model.text(system:user:maxTokens:seconds:)` answers text.
 - An agent that cannot work without the model must ask `context.host.model(for: word)`. It throws
   `AgentHostError.noModel`, a sentence naming the agent, when there is none.
 - A failed ask throws `AgentHostError.noAnswer`. An answer that does not decode throws `.answer`.
+- `agents.call(word, input:)` calls a needed agent with JSON and answers its JSON (a typed `call(_:input:as:)` too).
+  The host runs it as a call of its own: its own process, its own folder, its own lane; it shares only the
+  host's folder. `context.host.agents(for: word, needing: need)` throws `AgentHostError.noAgent`, naming the
+  install, when the host cannot call it.
+- What a needed agent refuses or fails throws `AgentHostError.agent`, its refusal inside: a refusal of kind
+  `host` to the caller, since the caller's call was not what was wrong. A word the agent never declared throws
+  `.undeclared`, a fault.
 - The ask is never a field of `Input`. A model writes a call's input; it never writes what the person asked.
 - Attachments and the support folder are never fields of `Input` either. A model names the files it means in
   the input (a `path`); the files the person attached ride the host, and an agent reads the one a call means
@@ -283,8 +298,9 @@ holds them.
 ```
 
 - Every entry has `kind` (`package` or `worker`), `word`, `summary`, `module` and `type`.
-- A package's entry adds `schema`, `fields`, `lanes`, `guide`, `makes`, `takes` and `keeps` (§3), so a host
-  knows what to hand a call, and whether to place a folder for it, without running the agent.
+- A package's entry adds `schema`, `fields`, `lanes`, `guide`, `makes`, `takes`, `keeps` and `needs` (§3), so a
+  host knows what to hand a call, whether to place a folder for it and which agents to offer it, without running
+  the agent.
 - A worker's entry adds `toolNames`, `budget`, `shell` and `reportRule`. A worker described by an entry opens
   its prompt as its host's workers do.
 
@@ -300,10 +316,12 @@ itself by its one key. The runner writes to its stdout and reads its stdin. Its 
 | Message | From | When | Body |
 | --- | --- | --- | --- |
 | `hello` | runner | first | `wire` (`"granite-agent/1"`), `pid`, `answer` (`"granite-answer/1"` from a runner whose calls keep it) |
-| `perform` | host | after `hello` | `word`, `input`, `directory`, `ask`, `attachments` and `support` (§6, each only when the host offers it), `model` (whether the host offers one) |
+| `perform` | host | after `hello` | `word`, `input`, `directory`, `ask`, `attachments`, `support` and `agents` (§6, each only when the host offers it), `model` (whether the host offers one) |
 | `note` | runner | any time | a line of progress |
 | `model` | runner | any time | `id`, `kind` (`object` or `text`), `schema`, `system`, `user`, `maxTokens`, `seconds` |
 | `answer` | host | after a `model` | `id`, and exactly one of `object`, `text` or `error` |
+| `agent` | runner | any time | `id`, `word` (one of `perform`'s `agents`), `input`: a call of a needed agent |
+| `called` | host | after an `agent` | `id`, and `output`, or `failed` with `refused` when the called agent refused |
 | `output` | runner | last | the call's answer (§4.2), or a package's own JSON |
 | `failed` | runner | last | a sentence: why the call failed; beside it, `refused` (§4.4) when it was refused |
 | `cancel` | host | any time | `{}`: end the call |
@@ -323,7 +341,11 @@ A call, line by line:
 
 Further rules:
 
-- **Answers match by `id`.** Asks may overlap, and an answer may come in any order.
+- **Answers match by `id`.** Asks may overlap, and an answer may come in any order. `agent` calls keep ids of
+  their own, answered by `called`.
+- **A needed agent is the host's call.** The host runs it as it runs any call (its own process, its own support
+  folder and lane) and answers `called`. A host must refuse a word that is not among the `agents` it offered,
+  and must refuse a cycle (an agent called again inside its own call) before it waits on a lane.
 - **Ending a call.** `cancel`, or SIGTERM to the runner's process group, ends the run, and the runner says
   `failed`. A host that receives no answer must end the process: SIGTERM, then SIGKILL after a grace.
 - **The host's end closing is not a cancel.** It means the host sends nothing more. The call runs on, and an
@@ -411,7 +433,9 @@ A host installs a package as a runner on its shelf:
 - **The version.** `granite-agent/<major>` names the wire, the entry and the installation together.
 - **A minor change** adds an optional field. A reader must ignore fields it does not know, so it stays
   `granite-agent/1`. `makes`, `hello.answer`, `refused`, the answer's reserved keys, `takes`, `keeps`,
-  `perform`'s `attachments` and `support`, and the installation's `dependencies` came so.
+  `needs`, `perform`'s `attachments`, `support` and `agents`, and the installation's `dependencies` came so. The
+  `agent` and `called` messages came in place too, while Granite is unreleased: a runner sends `agent` only
+  when its host's `perform` offered `agents`, so a host from before them is never sent one.
 - **The answer.** `granite-answer/<major>` names the answer (§4.2) apart from the wire: a new reserved key is
   minor, and so is a new interaction kind (§4.3); `interactions` came so, and the answer stayed
   `granite-answer/1`. Conforming is opt-in until every agent of a shelf conforms; then `Output: AgentAnswer` is required,
@@ -438,6 +462,8 @@ A host installs a package as a runner on its shelf:
 - [ ] An agent that reads the person's files declares `takes`, and reads the one a call means from
       `context.host.attachments`; one that keeps files between calls declares `keeps`, and writes them under
       `context.host.support` only.
+- [ ] An agent that calls another declares it in `needs`, calls it only through `context.host.agents`, and says
+      a needed agent's refusal as its host's.
 - [ ] `guide` says how to use it well when `summary` cannot.
 - [ ] Each agent has its two-line record, and a test finds it with `GraniteRoster.discovered()`.
 - [ ] Nothing prints for a host to read: notes go through `context.host.note`.
@@ -449,6 +475,8 @@ A host installs a package as a runner on its shelf:
       folder of the host's placing that outlives calls, installs and rebuilds.
 - [ ] It runs a runner per call, speaks `granite-agent/1`, matches answers by id, and ends a process that
       does not answer.
+- [ ] It offers a run the agents it `needs` that it can serve (`perform.agents`), runs each as a call of its own,
+      answers `called` by id, and refuses an undeclared word and a cycle.
 - [ ] It reaps each process, and reports what it took, its asks counted.
 - [ ] It reads a refusal by its kind, and a fault as a fault.
 - [ ] It performs the interactions it has a compatible way to perform, and ignores the rest, a kind it does not

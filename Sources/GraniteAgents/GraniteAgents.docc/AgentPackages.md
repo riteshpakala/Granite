@@ -126,6 +126,18 @@ reads it as `context.host`.
   the package says what it keeps (`keeps`). Keep files there and nowhere else under `~`: where it is, is the app's.
 - `note(_:)`: a line of progress the app shows where it shows its agents' work.
 - `model`: the model the app has loaded, as an ``AgentHostModel``: a JSON object that fits a schema, or text.
+- `agents`: the other agents the app calls for the run, as ``AgentHostAgents``: only the ones the package declares
+  in `needs` (``AgentNeed``), and only those the app can serve. The app runs each as a call of its own, with its
+  own folder; what it refuses comes back as ``AgentHostError/agent(word:refusal:message:)``, the host's refusal to
+  the caller.
+
+```swift
+public static let needs = [AgentNeed(word: "veil", why: "seals each rendered page")]
+
+// in the run
+let sealed = try await context.host.agents(for: Self.word, needing: "veil")
+    .call("veil", input: VeilCall(action: "seal", path: page), as: VeilAnswer.self)
+```
 
 ```swift
 public static let takes = ["public.image"]                                      // the person's pictures reach the run

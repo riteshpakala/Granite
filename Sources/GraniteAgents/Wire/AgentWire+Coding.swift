@@ -1,7 +1,7 @@
 import Foundation
 
 extension AgentWire: Codable {
-    private enum Key: String, CodingKey { case hello, perform, note, model, answer, output, failed, refused, cancel, entries }
+    private enum Key: String, CodingKey { case hello, perform, note, model, answer, agent, called, output, failed, refused, cancel, entries }
     private struct Empty: Codable {}
 
     public init(from decoder: Decoder) throws {
@@ -11,6 +11,8 @@ extension AgentWire: Codable {
         else if let value = try keyed.decodeIfPresent(String.self, forKey: .note) { self = .note(value) }
         else if let value = try keyed.decodeIfPresent(ModelAsk.self, forKey: .model) { self = .model(value) }
         else if let value = try keyed.decodeIfPresent(ModelAnswer.self, forKey: .answer) { self = .answer(value) }
+        else if let value = try keyed.decodeIfPresent(AgentCall.self, forKey: .agent) { self = .agent(value) }
+        else if let value = try keyed.decodeIfPresent(AgentCalled.self, forKey: .called) { self = .called(value) }
         else if keyed.contains(.output) { self = .output(try keyed.decode(AgentJSON.self, forKey: .output)) }
         else if let value = try keyed.decodeIfPresent(String.self, forKey: .failed) {
             self = .failed(Failure(value, refusal: try? keyed.decodeIfPresent(AgentRefusal.self, forKey: .refused)))
@@ -31,6 +33,8 @@ extension AgentWire: Codable {
         case .note(let value): try keyed.encode(value, forKey: .note)
         case .model(let value): try keyed.encode(value, forKey: .model)
         case .answer(let value): try keyed.encode(value, forKey: .answer)
+        case .agent(let value): try keyed.encode(value, forKey: .agent)
+        case .called(let value): try keyed.encode(value, forKey: .called)
         case .output(let value): try keyed.encode(value, forKey: .output)
         case .failed(let value):
             try keyed.encode(value.message, forKey: .failed)

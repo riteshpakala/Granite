@@ -188,6 +188,13 @@
           "description" : "the module that declares it",
           "type" : "string"
         },
+        "needs" : {
+          "description" : "the agents it calls to do its work, each by its word; a host offers the ones it can serve, and a run may call no other",
+          "items" : {
+            "$ref" : "#/$defs/need"
+          },
+          "type" : "array"
+        },
         "reportRule" : {
           "type" : "string"
         },
@@ -305,6 +312,28 @@
         "kind",
         "what",
         "into"
+      ],
+      "type" : "object"
+    },
+    "need" : {
+      "properties" : {
+        "source" : {
+          "description" : "where it can be had when a host has no store to find it in: a git URL",
+          "type" : "string"
+        },
+        "why" : {
+          "description" : "what it is needed for, in a sentence a host may show",
+          "type" : "string"
+        },
+        "word" : {
+          "description" : "the word the needed agent is called by",
+          "pattern" : "^[a-z][a-z0-9-]*$",
+          "type" : "string"
+        }
+      },
+      "required" : [
+        "word",
+        "why"
       ],
       "type" : "object"
     },
@@ -429,6 +458,13 @@
       "properties" : {
         "perform" : {
           "properties" : {
+            "agents" : {
+              "description" : "the agents the host will call for the run, by word: the package's needs it can serve",
+              "items" : {
+                "type" : "string"
+              },
+              "type" : "array"
+            },
             "ask" : {
               "description" : "what the person asked, in their words",
               "type" : "string"
@@ -558,6 +594,66 @@
       },
       "required" : [
         "answer"
+      ],
+      "type" : "object"
+    },
+    {
+      "description" : "agent → host: a call of another agent the package needs, under an id",
+      "properties" : {
+        "agent" : {
+          "properties" : {
+            "id" : {
+              "type" : "integer"
+            },
+            "input" : {
+              "description" : "the called agent's input, as its schema says"
+            },
+            "word" : {
+              "description" : "a word the package needs, among the perform's agents",
+              "type" : "string"
+            }
+          },
+          "required" : [
+            "id",
+            "word",
+            "input"
+          ],
+          "type" : "object"
+        }
+      },
+      "required" : [
+        "agent"
+      ],
+      "type" : "object"
+    },
+    {
+      "description" : "host → agent: the called agent's output, or why there is none, by the call's id",
+      "properties" : {
+        "called" : {
+          "properties" : {
+            "failed" : {
+              "description" : "why there is no output",
+              "type" : "string"
+            },
+            "id" : {
+              "type" : "integer"
+            },
+            "output" : {
+              "description" : "the called agent's output",
+              "type" : "object"
+            },
+            "refused" : {
+              "$ref" : "#/$defs/refusal"
+            }
+          },
+          "required" : [
+            "id"
+          ],
+          "type" : "object"
+        }
+      },
+      "required" : [
+        "called"
       ],
       "type" : "object"
     },

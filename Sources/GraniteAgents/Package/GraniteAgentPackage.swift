@@ -39,8 +39,8 @@ import Foundation
 /// works in and does not show it to a model. An `Output` that wrote files says where in `path` or `paths`; one
 /// that conforms to `AgentAnswer` answers `granite-answer/1`, checked and stamped before it leaves the process.
 /// PIN: what else the app offers — the person's ask, the files they attached (when `takes` covers them), a folder of
-/// the agent's own (when it `keeps` something), a note it shows, the model it has loaded — a run reads through
-/// `context.host`, `.none` when the call came with JSON alone.
+/// the agent's own (when it `keeps` something), a note it shows, the model it has loaded, the agents it `needs` —
+/// a run reads through `context.host`, `.none` when the call came with JSON alone.
 public protocol GraniteAgentPackage: Sendable {
     /// What a call carries, decoded from the caller's JSON. Its fields are the package's schema.
     associatedtype Input: Codable & Sendable
@@ -75,6 +75,9 @@ public protocol GraniteAgentPackage: Sendable {
     /// watermark"). Declaring one asks the host for a folder of the agent's own, `context.host.support`, which the
     /// host keeps across calls, installs and rebuilds. Default: nil, and no folder.
     static var keeps: String? { get }
+    /// The agents it calls to do its work, each by its word (`AgentNeed`): a run calls them through
+    /// `context.host.agents`, and may call no other. A host offers the ones it can serve. Default: none.
+    static var needs: [AgentNeed] { get }
 
     /// Makes what every run computes with. Called once, on the first call.
     static func compute() async throws -> Compute
@@ -93,6 +96,7 @@ extension GraniteAgentPackage {
     public static var makes: [AgentMake] { [] }
     public static var takes: [String] { [] }
     public static var keeps: String? { nil }
+    public static var needs: [AgentNeed] { [] }
 }
 
 extension GraniteAgentPackage where Compute == Void {

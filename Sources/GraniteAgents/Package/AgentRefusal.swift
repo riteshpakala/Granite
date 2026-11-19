@@ -41,7 +41,7 @@ public struct AgentRefusal: Error, Codable, Sendable, Equatable, Hashable, Custo
     }
 
     /// The refusal `error` is, when it is one: an `AgentRefusal`, an `AgentRefusing` error, Granite's own input and
-    /// answer errors, a host model that could not answer. Nil: a fault.
+    /// answer errors, a host model that could not answer, an agent the host called that refused. Nil: a fault.
     public static func of(_ error: any Error) -> AgentRefusal? {
         if let refusal = error as? AgentRefusal { return refusal }
         if let refusing = error as? any AgentRefusing { return refusing.refusal }
@@ -52,7 +52,15 @@ public struct AgentRefusal: Error, Codable, Sendable, Equatable, Hashable, Custo
             case .refused(_, let refusal, _): return refusal
             }
         }
-        if let host = error as? AgentHostError { return AgentRefusal(.model, "\(host)") }
+        if let host = error as? AgentHostError {
+            switch host {
+            case .noModel, .noAnswer, .answer: return AgentRefusal(.model, "\(host)")
+            // An agent the host called refused or failed, or could not be called: the host's to serve, not the call's.
+            case .noAgent, .agent: return AgentRefusal(.host, "\(host)")
+            // A word the package never declared: its own fault.
+            case .undeclared: return nil
+            }
+        }
         return nil
     }
 }

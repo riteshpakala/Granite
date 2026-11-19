@@ -47,6 +47,8 @@ public enum AgentSchemaJSON {
             "takes": described(["type": "array", "items": string],
                                "what it reads of the person's files, as UTType identifiers; a host hands it no other attachment"),
             "keeps": described(string, "what it keeps between calls, in a sentence a host may show; asks the host for a folder of its own"),
+            "needs": described(["type": "array", "items": ["$ref": "#/$defs/need"]],
+                               "the agents it calls to do its work, each by its word; a host offers the ones it can serve, and a run may call no other"),
             "toolNames": ["type": "array", "items": string],
             "budget": ["type": "string", "enum": WorkerBudget.allCases.map(\.rawValue)],
             "shell": ["type": "boolean"],
@@ -61,6 +63,15 @@ public enum AgentSchemaJSON {
             "what": described(string, "what it is, in the words a reading can match to a request"),
             "into": described(["type": "array", "items": string], "where it writes, relative to the host's folder; * is one path component"),
             "never": described(string, "what it never does"),
+        ],
+    ]
+
+    nonisolated(unsafe) static let need: [String: Any] = [
+        "type": "object", "required": ["word", "why"],
+        "properties": [
+            "word": described(["type": "string", "pattern": "^[a-z][a-z0-9-]*$"], "the word the needed agent is called by"),
+            "why": described(string, "what it is needed for, in a sentence a host may show"),
+            "source": described(string, "where it can be had when a host has no store to find it in: a git URL"),
         ],
     ]
 
@@ -111,7 +122,7 @@ public enum AgentSchemaJSON {
     ]
 
     static var definitions: [String: Any] {
-        ["schema": schemaForm, "field": field, "entry": entryObject, "make": make, "refusal": refusal, "answer": answerObject,
+        ["schema": schemaForm, "field": field, "entry": entryObject, "make": make, "need": need, "refusal": refusal, "answer": answerObject,
          "interaction": interaction]
     }
 
@@ -140,7 +151,19 @@ public enum AgentSchemaJSON {
                            "attachments": described(["type": "array", "items": string],
                                                     "the person's files the host hands the call, absolute paths, only of a type the agent takes"),
                            "support": described(string, "a folder of the agent's own, kept by the host across calls, installs and rebuilds"),
-                           "model": described(["type": "boolean"], "whether the host offers its model")],
+                           "model": described(["type": "boolean"], "whether the host offers its model"),
+                           "agents": described(["type": "array", "items": string],
+                                               "the agents the host will call for the run, by word: the package's needs it can serve")],
+        ]
+        let call: [String: Any] = [
+            "type": "object", "required": ["id", "word", "input"],
+            "properties": ["id": integer, "word": described(string, "a word the package needs, among the perform's agents"),
+                           "input": described([String: Any](), "the called agent's input, as its schema says")],
+        ]
+        let called: [String: Any] = [
+            "type": "object", "required": ["id"],
+            "properties": ["id": integer, "output": described(["type": "object"], "the called agent's output"),
+                           "failed": described(string, "why there is no output"), "refused": ["$ref": "#/$defs/refusal"]],
         ]
         let hello: [String: Any] = [
             "type": "object", "required": ["wire"],
@@ -159,6 +182,8 @@ public enum AgentSchemaJSON {
                 message("note", string, "agent → host: a line of progress"),
                 message("model", ask, "agent → host: an ask of the host's model"),
                 message("answer", answer, "host → agent: the answer to an ask, by its id"),
+                message("agent", call, "agent → host: a call of another agent the package needs, under an id"),
+                message("called", called, "host → agent: the called agent's output, or why there is none, by the call's id"),
                 message("output", described(["type": "object"], "a granite-answer/1 answer from a package whose Output keeps it, else its own JSON"),
                         "agent → host, last: the call's output"),
                 ["type": "object", "required": ["failed"], "description": "agent → host, last: why the call failed, and when it was refused, how",

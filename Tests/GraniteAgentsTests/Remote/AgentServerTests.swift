@@ -6,9 +6,11 @@ import XCTest
 /// channel, a call it cannot make refused, and a cancel ending the run.
 @MainActor
 final class AgentServerTests: XCTestCase {
-    private let roster = GraniteRoster([.package(AnyAgentPackage(EchoPackage.self)), .package(AnyAgentPackage(HostedPackage.self))])
+    private let roster = GraniteRoster([.package(AnyAgentPackage(EchoPackage.self)), .package(AnyAgentPackage(HostedPackage.self)),
+                                        .package(AnyAgentPackage(NeedyPackage.self))])
 
     private func call(_ perform: AgentWire.Perform, answering: (@Sendable (AgentWire.ModelAsk) -> AgentWire.ModelAnswer)? = nil,
+                      calling: (@Sendable (AgentWire.AgentCall) -> AgentWire.AgentCalled)? = nil,
                       cancelAfter: Double? = nil) async -> (exit: AgentServer.Exit, heard: [AgentWire]) {
         let (host, agent) = MemoryChannel.pair()
         let roster = self.roster
@@ -23,6 +25,7 @@ final class AgentServerTests: XCTestCase {
                     Task { try? await Task.sleep(nanoseconds: UInt64(cancelAfter * 1e9)); try? host.send(.cancel) }
                 }
             case .model(let ask): try? host.send(.answer(answering?(ask) ?? .init(id: ask.id, error: "no model")))
+            case .agent(let call): try? host.send(.called(calling?(call) ?? .init(id: call.id, failed: "not called")))
             case .output, .failed: host.close()
             default: break
             }
@@ -69,7 +72,47 @@ final class AgentServerTests: XCTestCase {
     func testACallItCannotMakeIsRefused() async {
         let (exit, heard) = await call(.init(word: "nobody", input: .object([:])))
         XCTAssertEqual(exit, .failed)
-        XCTAssertEqual(heard.last, .failed("no agent is called `nobody` in this process; it carries `echo`, `hosted`"))
+        XCTAssertEqual(heard.last, .failed("no agent is called `nobody` in this process; it carries `echo`, `hosted`, `needy`"))
+    }
+
+    /// An agent the package needs is called across the channel: an `agent` message under an id, the host's `called`
+    /// under the same id, the words the run sees being the ones the host offered that the package needs.
+    func testANeededAgentIsCalledAcrossTheChannel() async {
+        let (exit, heard) = await call(.init(word: "needy", input: .object(["word": .string("echo"), "text": .string("hi")]),
+                                             agents: ["echo", "hosted"]),
+                                       calling: { call in .init(id: call.id, output: .string("hi hi")) })
+        XCTAssertEqual(exit, .answered)
+        guard case .agent(let asked)? = heard.first(where: { $0.kind == "agent" }) else { return XCTFail("\(heard)") }
+        XCTAssertEqual(asked.word, "echo")
+        XCTAssertEqual(asked.input, .object(["text": .string("hi"), "times": .integer(2)]))
+        guard case .output(let output)? = heard.last, let answer = try? JSONDecoder().decode(NeedyPackage.Answer.self, from: output.data()) else {
+            return XCTFail("\(heard)")
+        }
+        XCTAssertEqual(answer, NeedyPackage.Answer(heard: "hi hi", words: ["echo"]))
+    }
+
+    /// A word the package never declared is never sent, even when the host would call it: the run fails by its own fault.
+    func testAWordItDoesNotNeedIsNeverSent() async {
+        let (exit, heard) = await call(.init(word: "needy", input: .object(["word": .string("hosted"), "text": .string("hi")]),
+                                             agents: ["echo", "hosted"]))
+        XCTAssertEqual(exit, .failed, "its own fault, not a refusal")
+        XCTAssertFalse(heard.contains { $0.kind == "agent" }, "\(heard)")
+    }
+
+    /// A host that offers no agents, and an agent the host called that refused, are both the host's refusal.
+    func testWithoutTheAgentItNeedsTheCallIsTheHostsRefusal() async {
+        let (exit, heard) = await call(.init(word: "needy", input: .object(["word": .string("echo"), "text": .string("hi")])))
+        XCTAssertEqual(exit, .refused)
+        guard case .failed(let failure)? = heard.last else { return XCTFail("\(heard)") }
+        XCTAssertEqual(failure.refusal?.kind, .host)
+
+        let (refusedExit, refusedHeard) = await call(.init(word: "needy", input: .object(["word": .string("echo"), "text": .string("hi")]),
+                                                           agents: ["echo"]),
+                                                     calling: { call in .init(id: call.id, failed: "no text", refused: AgentRefusal(.input, "no text")) })
+        XCTAssertEqual(refusedExit, .refused)
+        guard case .failed(let refused)? = refusedHeard.last else { return XCTFail("\(refusedHeard)") }
+        XCTAssertEqual(refused.refusal?.kind, .host)
+        XCTAssertTrue(refused.message.contains("`echo` refused (input): no text"), refused.message)
     }
 
     func testACancelEndsTheRun() async {

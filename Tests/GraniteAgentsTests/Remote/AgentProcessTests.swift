@@ -35,11 +35,12 @@ final class AgentProcessTests: XCTestCase {
         let entries = try await AgentProcess(executable: Self.runner).describe()
         XCTAssertEqual(entries.map(\.word), ["parrot"])
         XCTAssertEqual(entries.first?.module, "AgentRunnerFixture")
-        XCTAssertEqual(entries.first?.schema?.fields.map(\.name), ["text", "notes", "askModel", "delay", "crash", "fail", "fault", "directory"],
+        XCTAssertEqual(entries.first?.schema?.fields.map(\.name), ["text", "notes", "askModel", "delay", "crash", "fail", "fault", "callAgent", "directory"],
                        "the schema crossed in its own order")
         XCTAssertEqual(entries.first?.guide, "Give it text; it says it back.")
         XCTAssertEqual(entries.first?.takes, ["public.image"], "what it reads of the person's files, said without running it")
         XCTAssertEqual(entries.first?.keeps, "the lines it has said")
+        XCTAssertEqual(entries.first?.needs, [AgentNeed(word: "echo", why: "says the text back")], "and what it needs")
     }
 
     func testOneCallInAProcessOfItsOwn() async throws {
@@ -67,6 +68,29 @@ final class AgentProcessTests: XCTestCase {
         XCTAssertGreaterThan(cost.peakBytes, 1_000_000)
         XCTAssertTrue(cost.sentence.hasPrefix("released · peak "), cost.sentence)
         XCTAssertEqual(cost.asks, 1, "the host counts the asks it answered")
+    }
+
+    /// A runner calls the agent it needs through this host, across the pipe, and a refusal from that agent comes back
+    /// to it as the host's.
+    func testARunnerCallsTheAgentItNeedsThroughTheHost() async throws {
+        let agents = TableAgents(["echo": { data in
+            guard case .object(let call)? = AgentJSON(data: data), case .string(let text)? = call["text"] else { return Data() }
+            return try JSONEncoder().encode(text + " " + text)
+        }])
+        let output = try await AgentProcess(executable: Self.runner).perform(
+            word: "parrot", input: Data(#"{"text": "hi", "callAgent": true}"#.utf8), host: AgentHost(agents: agents))
+        XCTAssertEqual(try said(output)["agentSaid"] as? String, "hi hi")
+        XCTAssertEqual(agents.called, ["echo"])
+
+        let refusing = TableAgents(["echo": { _ in throw AgentRemoteError.refused(word: "echo", refusal: AgentRefusal(.input, "no text"), message: "no text") }])
+        do {
+            _ = try await AgentProcess(executable: Self.runner).perform(
+                word: "parrot", input: Data(#"{"text": "hi", "callAgent": true}"#.utf8), host: AgentHost(agents: refusing))
+            XCTFail("echo refused")
+        } catch AgentRemoteError.refused(_, let refusal, let message) {
+            XCTAssertEqual(refusal.kind, .host, "echo's refusal is the host's, to parrot")
+            XCTAssertTrue(message.contains("`echo` refused (input): no text"), message)
+        }
     }
 
     /// A refusal crosses the wire with its kind and reasons, in the agent's own sentence.

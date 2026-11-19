@@ -1,6 +1,7 @@
 //  WHAT: The host's side of `granite-agent/1`: one call to an agent in a process of its own. The runner is
-//        spawned, handed the call, its notes passed to the host and its asks answered by the host's model, its
-//        output taken, and the process reaped, with what it took measured.
+//        spawned, handed the call, its notes passed to the host, its asks answered by the host's model and its calls
+//        of the agents it needs made by the host's agents, its output taken, and the process reaped, with what it
+//        took measured.
 //  PIN:  ONE PROCESS, ONE CALL, THEN RELEASED. Nothing of a call outlives it: the GPU device, the web page, the
 //        model's asks are the process's, and the process is gone when the answer is in. A call that will not
 //        end is ended: cancelling sends `cancel` and SIGTERM to its group, and SIGKILL follows the grace.
@@ -42,7 +43,7 @@ public struct AgentProcess: Sendable {
         let child = try AgentChild(executable: executable, arguments: [], directory: directory, environment: environment)
         let call = AgentWire.Perform(word: word, input: json, directory: host.directory, ask: host.ask,
                                      attachments: host.attachments.isEmpty ? nil : host.attachments, support: host.support,
-                                     model: host.model != nil)
+                                     model: host.model != nil, agents: host.agents.map(\.words))
         let asks = AskCount()
         let result = await withTaskCancellationHandler {
             await Self.serve(child, word: word, call: call, host: host, asks: asks)
@@ -95,6 +96,11 @@ public struct AgentProcess: Sendable {
                     let answer = await Self.answer(ask, host: host)
                     try? child.channel.send(.answer(answer))
                 })
+            case .agent(let call):
+                asks.append(Task {
+                    let called = await Self.called(call, host: host)
+                    try? child.channel.send(.called(called))
+                })
             case .output(let json):
                 return .success(json.data())
             case .failed(let failure):
@@ -117,6 +123,26 @@ public struct AgentProcess: Sendable {
         private var count = 0
         func add() { lock.withLock { count += 1 } }
         var value: Int { lock.withLock { count } }
+    }
+
+    /// What the host's agents answered one call: the output, or why there is none, a refusal kept as one.
+    static func called(_ call: AgentWire.AgentCall, host: AgentHost) async -> AgentWire.AgentCalled {
+        guard let agents = host.agents, agents.words.contains(call.word) else {
+            return .init(id: call.id, failed: "this host does not call `\(call.word)`", refused: AgentRefusal(.host, "this host does not call `\(call.word)`"))
+        }
+        do {
+            let data = try await agents.call(call.word, input: call.input.data())
+            guard let output = AgentJSON(data: data) else { return .init(id: call.id, failed: "`\(call.word)` answered something that is not JSON") }
+            return .init(id: call.id, output: output)
+        } catch AgentRemoteError.refused(_, let refusal, let message) {
+            return .init(id: call.id, failed: message, refused: refusal)
+        } catch AgentPackageError.refused(_, let refusal, let said) {
+            return .init(id: call.id, failed: said, refused: refusal)
+        } catch AgentHostError.agent(_, let refusal, let message) {
+            return .init(id: call.id, failed: message, refused: refusal)
+        } catch {
+            return .init(id: call.id, failed: "\(error)", refused: AgentRefusal.of(error))
+        }
     }
 
     /// The host's model's answer to one ask, or a sentence saying why there is none.

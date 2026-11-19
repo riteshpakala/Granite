@@ -19,6 +19,8 @@ host                                   runner (one process, one call)
  │  ◀───────────────────── {"note": …}   context.host.note
  │  ◀──────────────────── {"model": …}   context.host.model, answered by the host's model
  │  {"answer": …} ────────────────────▶
+ │  ◀──────────────────── {"agent": …}   context.host.agents: a needed agent, run by the host as its own call
+ │  {"called": …} ────────────────────▶
  │  ◀─────────────────── {"output": …}
  │  reaps it: "released · peak 412 MB · 1.8 s CPU in 2.4 s"
 ```
@@ -125,6 +127,8 @@ echo '{"perform":{"word":"parrot","input":{"text":"hi"},"model":false}}' | agent
 - A host fills `directory`, offers its model when it has one, and ends a process that does not answer.
 - A host hands a call only the attachments its agent `takes`, and places a support folder for an agent that
   `keeps` something; both cross the wire in `perform`, and only when offered.
+- A host offers a call the agents its package `needs` that it can serve (`perform.agents`), runs each as a call of
+  its own, and answers `called` by id; it refuses a word it did not offer, and a cycle, before waiting on a lane.
 - A host checks the digest before every launch, and installs again rather than running a changed executable.
 - A host rebuilds to take what an agent's dependencies resolve to now, and says what moved from `dependencies`.
 
@@ -145,6 +149,7 @@ echo '{"perform":{"word":"parrot","input":{"text":"hi"},"model":false}}' | agent
 ### The host
 
 - ``AgentProcess``
+- ``AgentHostAgents``
 - ``AgentProcessCost``
 - ``AgentRemoteError``
 - ``RemoteAgent``

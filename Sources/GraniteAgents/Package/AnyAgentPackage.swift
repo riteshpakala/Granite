@@ -29,6 +29,9 @@ public struct AnyAgentPackage: Sendable {
     /// What it keeps between calls, in its own sentence (`GraniteAgentPackage.keeps`): a host that says one places a
     /// folder for it and offers it as `AgentHost.support`.
     public let keeps: String?
+    /// The agents it calls, each by its word (`GraniteAgentPackage.needs`): a host offers the ones it can serve as
+    /// `AgentHost.agents`.
+    public let needs: [AgentNeed]
     private let call: @Sendable (Data, AgentHost) async throws -> Data
 
     public init<P: GraniteAgentPackage>(_ package: P.Type) {
@@ -43,6 +46,7 @@ public struct AnyAgentPackage: Sendable {
         makes = P.makes
         takes = P.takes
         keeps = P.keeps
+        needs = P.needs
         call = { data, host in try await Self.perform(P.self, data, host: host) }
     }
 
@@ -50,7 +54,7 @@ public struct AnyAgentPackage: Sendable {
     /// wherever the package lives. `RemoteAgent` makes one whose call runs a process of its own.
     public init(word: String, summary: String, module: String, type: String, schema: GraniteSchema, fields: [String: String],
                 lanes: Int?, guide: String, makes: [AgentMake] = [], takes: [String] = [], keeps: String? = nil,
-                perform: @escaping @Sendable (Data, AgentHost) async throws -> Data) {
+                needs: [AgentNeed] = [], perform: @escaping @Sendable (Data, AgentHost) async throws -> Data) {
         self.word = word
         self.summary = summary
         self.module = module
@@ -62,6 +66,7 @@ public struct AnyAgentPackage: Sendable {
         self.makes = makes
         self.takes = takes
         self.keeps = keeps
+        self.needs = needs
         call = perform
     }
 
@@ -93,7 +98,9 @@ public struct AnyAgentPackage: Sendable {
             for await event in tap { events.append(event) }
             return events
         }
-        let call = AgentPackageCall(id: id, input: input, host: offered)
+        // PIN: the run sees only the agents its package declares; a call to any other is its own fault, never sent.
+        let narrowed = offered.serving(offered.agents.map { DeclaredAgents(offered: $0, caller: P.word, needs: P.needs.map(\.word)) })
+        let call = AgentPackageCall(id: id, input: input, host: narrowed)
         do {
             _ = try await host.executable.perform(call)
         } catch {
